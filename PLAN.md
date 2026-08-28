@@ -195,8 +195,7 @@ guidance prototypes will reveal how much custom simulation work is really requir
 
 ## Risks & Open Questions
 
-- **Simulation complexity vs. fun**: realistic flight/guidance physics can become fiddly;
-  budget time in Phase 0 to tune "arcade vs. sim" feel before committing to full part depth.
+- **Simulation complexity vs. fun**: realistic flight/guidance physics can become fiddly, however if a decision has to be made between realism and arcadiness, pick realism. Use real world inspired parts, not sci-fi.
 - **Scope creep**: the part list is extensive — Phase 2 should timebox breadth rather than
   gold-plating any single category before all categories exist at a basic level.
 - **AI difficulty scaling**: keeping CPU opponents credible across the full tech spectrum
