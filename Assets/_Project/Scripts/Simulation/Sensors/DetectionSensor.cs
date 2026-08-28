@@ -42,7 +42,7 @@ namespace Vanquish.Simulation.Sensors
             var allSignatures = FindObjectsByType<DetectableSignature>(FindObjectsSortMode.None);
             foreach (var signature in allSignatures)
             {
-                if ((MonoBehaviour)(object)signature == this)
+                if (signature.gameObject == gameObject)
                     continue;
 
                 IDetectable detectable = signature;

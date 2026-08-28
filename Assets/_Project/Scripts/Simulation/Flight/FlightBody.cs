@@ -25,6 +25,12 @@ namespace Vanquish.Simulation.Flight
         [Tooltip("Maximum lateral acceleration in G the airframe can sustain (from airframe part).")]
         public float maxGForce = 20f;
 
+        [Header("Gravity")]
+        [Tooltip("Whether this body is affected by gravity. Since this prototype has no lift/AoA model yet, " +
+                 "unpowered lift-dependent bodies should leave this false until Phase 2's aerodynamic model " +
+                 "can actually counteract gravity; ballistic/rocket-style bodies can enable it.")]
+        public bool useGravity = false;
+
         [Header("Runtime State")]
         public bool isThrusting = true;
 
@@ -36,7 +42,7 @@ namespace Vanquish.Simulation.Flight
         {
             _rigidbody = GetComponent<Rigidbody>();
             _rigidbody.mass = massKg;
-            _rigidbody.useGravity = true;
+            _rigidbody.useGravity = useGravity;
         }
 
         /// <summary>
@@ -62,7 +68,10 @@ namespace Vanquish.Simulation.Flight
             Vector3 clamped = Vector3.ClampMagnitude(desiredAcceleration, maxAccel);
             _rigidbody.AddForce(clamped * _rigidbody.mass, ForceMode.Force);
 
-            // Align facing with velocity direction for missiles/fixed-wing drones.
+            // Align facing with velocity direction for missiles/fixed-wing drones. This
+            // transform's rotation IS the true physics heading (thrust applies along
+            // transform.forward) — any model/mesh-only orientation quirks belong on a
+            // child visual object, never baked into this rotation.
             if (_rigidbody.linearVelocity.sqrMagnitude > 0.25f)
             {
                 Quaternion targetRotation = Quaternion.LookRotation(_rigidbody.linearVelocity.normalized, Vector3.up);
