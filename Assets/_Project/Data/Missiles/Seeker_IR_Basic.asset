@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eefe97542a37bdc4e93e1f11a702f15b, type: 3}
+  m_Name: Seeker_IR_Basic
+  m_EditorClassIdentifier: 
+  id: missile_seeker_ir_basic
+  displayName: Basic Infrared Seeker
+  description: 
+  icon: {fileID: 0}
+  category: 3
+  tier: 0
+  researchCost: 0
+  buildCost: 0
+  massKg: 2
+  prerequisites: []
+  seekerType: 2
+  detectionRangeMeters: 2000
+  fieldOfViewDegrees: 30
+  reacquisitionTimeSeconds: 1
+  jamResistance: 0.2
+  countermeasureSusceptibility: 0.6

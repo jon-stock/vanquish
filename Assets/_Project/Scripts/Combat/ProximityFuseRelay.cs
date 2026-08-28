@@ -17,8 +17,17 @@ namespace Vanquish.Combat
 
         private void OnTriggerEnter(Collider other)
         {
-            if (owner != null)
-                owner.ReportHit(other.gameObject, isProximityDetonation: true);
+            if (owner == null)
+                return;
+
+            // Only actual units (anything with Health) arm the proximity fuse — this
+            // deliberately excludes terrain/scenery, which the missile should only
+            // ever destroy itself against via a direct hull collision, not detonate
+            // near just because it's flying close to the ground.
+            if (other.GetComponentInParent<Health>() == null)
+                return;
+
+            owner.ReportHit(other.gameObject, isProximityDetonation: true);
         }
     }
 }

@@ -14,7 +14,8 @@ namespace Vanquish.Core
         /// <summary>Bump when the schema changes in a breaking way; used to run migrations.</summary>
         public int saveVersion = 1;
 
-        public int currency;
+        /// <summary>New saves start with enough to research a few tech nodes before the first battle.</summary>
+        public int currency = 600;
 
         /// <summary>IDs of TechNode assets the player has unlocked.</summary>
         public List<string> unlockedTechNodeIds = new List<string>();

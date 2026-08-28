@@ -31,6 +31,13 @@ namespace Vanquish.Simulation.Flight
                  "can actually counteract gravity; ballistic/rocket-style bodies can enable it.")]
         public bool useGravity = false;
 
+        [Header("Flight Model")]
+        [Tooltip("Plane/rocket-style bodies (missiles, fixed-wing/jet drones) always orient their nose to face " +
+                 "current velocity. Quadcopter/multirotor-style bodies (electric propeller drones) are " +
+                 "omnidirectional — they hover and strafe freely without needing to face their direction of " +
+                 "travel, so this should be false for them.")]
+        public bool orientToVelocity = true;
+
         [Header("Runtime State")]
         public bool isThrusting = true;
 
@@ -71,8 +78,10 @@ namespace Vanquish.Simulation.Flight
             // Align facing with velocity direction for missiles/fixed-wing drones. This
             // transform's rotation IS the true physics heading (thrust applies along
             // transform.forward) — any model/mesh-only orientation quirks belong on a
-            // child visual object, never baked into this rotation.
-            if (_rigidbody.linearVelocity.sqrMagnitude > 0.25f)
+            // child visual object, never baked into this rotation. Quadcopter-style
+            // bodies skip this entirely (see orientToVelocity) since they're expected
+            // to strafe/hover omnidirectionally without spinning to face travel direction.
+            if (orientToVelocity && _rigidbody.linearVelocity.sqrMagnitude > 0.25f)
             {
                 Quaternion targetRotation = Quaternion.LookRotation(_rigidbody.linearVelocity.normalized, Vector3.up);
                 _rigidbody.MoveRotation(Quaternion.RotateTowards(_rigidbody.rotation, targetRotation, 180f * Time.fixedDeltaTime));

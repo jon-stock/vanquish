@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using Vanquish.Core;
 
 namespace Vanquish.Simulation.Sensors
 {
@@ -17,10 +18,24 @@ namespace Vanquish.Simulation.Sensors
         [Tooltip("Detected targets are re-scanned this often, in seconds.")]
         public float scanIntervalSeconds = 0.5f;
 
-        public IReadOnlyList<IDetectable> CurrentContacts => _currentContacts;
+        [Tooltip("Which team this sensor belongs to — used to filter contacts to enemies only, and to feed TeamAwareness.")]
+        public Team ownerTeam = Team.Player;
 
-        private readonly List<IDetectable> _currentContacts = new List<IDetectable>();
+        public IReadOnlyList<DetectableSignature> CurrentContacts => _currentContacts;
+
+        private readonly List<DetectableSignature> _currentContacts = new List<DetectableSignature>();
         private float _scanTimer;
+
+        /// <summary>Contacts belonging to a different team than this sensor's owner.</summary>
+        public IEnumerable<DetectableSignature> EnemyContacts
+        {
+            get
+            {
+                foreach (var contact in _currentContacts)
+                    if (contact.team != ownerTeam)
+                        yield return contact;
+            }
+        }
 
         private void Update()
         {
@@ -55,7 +70,7 @@ namespace Vanquish.Simulation.Sensors
 
                 if (distance <= effectiveRange)
                 {
-                    _currentContacts.Add(detectable);
+                    _currentContacts.Add(signature);
                 }
             }
         }

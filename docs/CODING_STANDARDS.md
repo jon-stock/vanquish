@@ -73,6 +73,50 @@ Assets/
   output, and IDE files. Only source-controlled: `Assets/`, `Packages/`,
   `ProjectSettings/`, `.gitignore`, docs.
 
+## Headless Testing Workflow (use this proactively during development)
+
+Unity supports running fully headless via the command line, which is far faster and
+more reliable for verifying gameplay/physics logic than asking a human to click Play
+and read the Console. Use this workflow whenever validating simulation behavior
+(flight, guidance, combat outcomes, etc.) rather than relying solely on manual testing:
+
+1. **Scene construction via script, not by hand.** Write an Editor script under
+   `Assets/_Project/Scripts/Editor/` with a `[MenuItem]`-decorated static method that
+   builds the test scene programmatically (`GameObject.CreatePrimitive`, `AddComponent`,
+   `EditorSceneManager.SaveScene`). This makes scenes reproducible, diffable, and
+   rebuildable without manual GameObject placement. See `Phase0TestSceneBuilder.cs`
+   for the pattern.
+
+2. **Run scene-building/compilation checks headlessly:**
+   ```
+   & "<UnityEditorPath>\Unity.exe" -batchmode -quit -nographics -projectPath "<repoRoot>" \
+     -executeMethod Vanquish.EditorTools.YourBuilder.BuildMethod -logFile "<logPath>"
+   ```
+   Requires the Editor to be fully closed first (only one process may hold the
+   project's `Temp/UnityLockfile` at a time — delete that file if a stale lock remains
+   after a crash). Check the log for `error CS`, `Exception`, or `Aborting batchmode`
+   to catch compile/runtime errors immediately instead of waiting on manual reports.
+
+3. **Run actual Play-mode simulation headlessly** for behavior verification (does the
+   missile actually hit the target, does a battle actually resolve, etc.) using a
+   runner pattern like `Phase0BatchRunner.cs`: open the scene, set
+   `EditorApplication.isPlaying = true`, subscribe to `EditorApplication.update` to poll
+   elapsed time, then call `EditorApplication.isPlaying = false` followed by
+   `EditorApplication.Exit(0)` once a fixed duration has passed (don't pass `-quit` for
+   this mode — the method must return control to the loop first). This runs the real
+   physics/game loop without any window or human interaction, and all `Debug.Log` calls
+   land in the log file for direct inspection.
+
+4. **Prefer this over asking the user to manually test** whenever a change is purely
+   about simulation/gameplay logic correctness. Reserve manual Play-mode testing for
+   things that genuinely need a human (visual/art review, feel/juice, input handling).
+   This was validated during Phase 0: a chain of bugs (fake-null `??` operator, a baked
+   mesh-orientation correction that also rotated the physics thrust axis, gravity being
+   force-enabled in `Awake`, and a guidance gain far too weak to use the airframe's real
+   G-limit) was diagnosed and fixed in a few iterations using headless runs with dense
+   telemetry logging, instead of many slow rounds of "user clicks Play, describes what
+   they saw, repeat."
+
 ## Git Branching (lightweight, adjust as the team grows)
 
 - `main` — always buildable/playable.

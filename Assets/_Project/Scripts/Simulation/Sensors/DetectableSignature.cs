@@ -1,4 +1,5 @@
 using UnityEngine;
+using Vanquish.Core;
 
 namespace Vanquish.Simulation.Sensors
 {
@@ -13,6 +14,9 @@ namespace Vanquish.Simulation.Sensors
 
         [Tooltip("Infrared signature, arbitrary units, after all modifiers are baked in at spawn time.")]
         public float infraredSignature = 1f;
+
+        [Tooltip("Which side this unit belongs to, used to filter friend/foe in team-aware detection and AI targeting.")]
+        public Team team = Team.Enemy;
 
         public Vector3 Position => transform.position;
         float IDetectable.RadarCrossSection => radarCrossSection;

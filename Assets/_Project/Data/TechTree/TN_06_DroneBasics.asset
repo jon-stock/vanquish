@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5838be6bb0ec882449e47b85b92859ee, type: 3}
+  m_Name: TN_06_DroneBasics
+  m_EditorClassIdentifier: 
+  id: TN_06_DroneBasics
+  displayName: Drone Airframes & Propulsion
+  description: 
+  tier: 0
+  researchCost: 50
+  prerequisites:
+  - {fileID: 11400000, guid: aacb2fe2dd6489f4399ca158da7369e6, type: 2}
+  unlocks:
+  - {fileID: 11400000, guid: aeb833a2f90ded04e861d5c3754daf5a, type: 2}
+  - {fileID: 11400000, guid: 5a091eb9a788ae546a90f444e22f7cbc, type: 2}
+  graphPosition: {x: 0, y: 0}
