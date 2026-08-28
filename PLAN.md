@@ -74,12 +74,12 @@ workshop uses the exact same simulation as live combat.
 ### Phase 0 — Foundations (Pre-production)
 **Goal:** De-risk the technical core before building content.
 
-- [ ] Set up Unity project, folder structure, source control, coding standards
-- [ ] Define ScriptableObject schema for all part categories (missile, drone, support)
-- [ ] Prototype flight physics for one drone and one missile using placeholder geometry
-- [ ] Prototype one guidance law (pursuit) against a static target
-- [ ] Prototype basic detection/RCS model (binary detect/no-detect first)
-- [ ] Decide on save/load format (JSON) and implement bare-bones save system
+- [x] Set up Unity project, folder structure, source control, coding standards
+- [x] Define ScriptableObject schema for all part categories (missile, drone, support)
+- [x] Prototype flight physics for one drone and one missile using placeholder geometry
+- [x] Prototype one guidance law (pursuit) against a static target
+- [x] Prototype basic detection/RCS model (binary detect/no-detect first)
+- [x] Decide on save/load format (JSON) and implement bare-bones save system
 
 **Exit criteria:** A capsule-and-cube missile can be launched at a moving cube drone and
 score a hit using real physics + one guidance law, all driven by data (not hardcoded values).
@@ -90,20 +90,20 @@ score a hit using real physics + one guidance law, all driven by data (not hardc
 **Goal:** One complete gameplay loop, minimal content, proves the concept is fun.
 
 **Workshop:**
-- [ ] Basic part catalog: 1 airframe, 1 engine, 1 seeker, 1 payload per missile/drone tier (low tier only)
-- [ ] Simple design editor: pick parts, see computed stats (mass, speed, range, RCS)
-- [ ] Minimal tech tree: ~10 nodes, linear unlock path
+- [x] Basic part catalog: 1 airframe, 1 engine, 1 seeker, 1 payload per missile/drone tier (low tier only)
+- [x] Simple design editor: pick parts, see computed stats (mass, speed, range, RCS)
+- [x] Minimal tech tree: ~10 nodes, linear unlock path
 
 **Combat:**
-- [ ] Single arena map
-- [ ] Player controls/deploys one drone + fires one missile type
-- [ ] One CPU enemy archetype (basic drone with simple FSM: patrol → detect → engage)
-- [ ] One scout drone type providing basic detection/reveal
-- [ ] Win/lose condition (destroy enemy base or all enemy units / player is destroyed)
+- [x] Single arena map
+- [x] Player controls/deploys one drone + fires one missile type
+- [x] One CPU enemy archetype (basic drone with simple FSM: patrol → detect → engage)
+- [x] One scout drone type providing basic detection/reveal
+- [x] Win/lose condition (destroy enemy base or all enemy units / player is destroyed)
 
 **Meta:**
-- [ ] Currency/resource loop: win battles → earn resources → unlock next tier in workshop
-- [ ] Basic HUD (health, ammo, radar/contact ping)
+- [x] Currency/resource loop: win battles → earn resources → unlock next tier in workshop
+- [x] Basic HUD (health, ammo, radar/contact ping)
 
 **MVP Definition of Done:** A player can research a part, build a drone/missile loadout,
 enter combat, use a scout to find the enemy, engage and win or lose, then return to the
