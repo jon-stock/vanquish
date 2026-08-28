@@ -115,19 +115,261 @@ scope of content is minimal, but the loop must be complete and fun.
 ### Phase 2 — Content & Systems Expansion (Alpha)
 **Goal:** Flesh out the "full spectrum" — expand breadth of parts, tiers, and combat depth.
 
-- [ ] Full missile part set: all payload types/sizes, all engine types, all seeker types, fuels, countermeasures, jamming/counter-jamming
-- [ ] Full drone part set: all propulsion tiers (electric → subsonic → supersonic), airframe classes, wing/propeller types, hull materials, weapon bay sizes
-- [ ] Expand tech tree to full breadth (all tiers, branching paths, meaningful trade-offs)
-- [ ] Proportional navigation + datalink mid-course guidance
-- [ ] RCS/stealth model with partial detection probability (not just binary)
-- [ ] Jamming/counter-jamming affecting lock quality
-- [ ] Multiple CPU archetypes (interceptor, SAM site, scout-hunter) with behavior trees
-- [ ] Multiple maps/scenarios with different objectives
-- [ ] Base-building/support architecture placement (radar installations, launch platforms, point defense)
-- [ ] Testing range mode in the workshop (fire designs at dummy targets before committing to a battle)
+Phase 2 is too large to tackle as one undifferentiated block — it's split into seven
+sub-milestones (2A–2G) with a recommended sequence based on dependencies. Each has its
+own concrete tasks, technical notes, and exit criteria so scope stays bounded and any
+one sub-milestone can be picked up, paused, or reordered without derailing the rest.
 
-**Exit criteria:** All part categories from the design doc exist in some form; a player can
-progress from grenade-drone tier through to at least early supersonic/guided-missile tier.
+**Recommended order:** 2A → 2B → 2G → 2C → 2D → 2E → 2F. Content breadth (2A/2B) comes
+first because every later sub-milestone (test range, guidance depth, AI depth) is more
+meaningful once there's actually more than one option per part slot. 2G (test range) is
+cheap and high-value once that breadth exists. 2F (base building) is the most UI-heavy
+and least essential to "full spectrum" feeling real, so it's last.
+
+---
+
+#### 2A — Missile Part Breadth
+**Goal:** Every missile category has multiple real options with genuine trade-offs, not just Tier-0's one-of-each.
+
+- [ ] Payloads: add remaining `PayloadType` variants (ShapedCharge, Kinetic, Cluster,
+  Grenade) at multiple size tiers each (e.g. Small/Medium/Large HE-Frag), tuning
+  `warheadMassKg`/`blastRadiusMeters`/`directDamage`/`splashDamage` so size is a genuine
+  mass-vs-damage trade-off, not a strict upgrade.
+- [ ] Engines: add assets for `SolidRocket` (upgraded), `LiquidRocket`, `Ramjet`,
+  `Scramjet` (Tier 3-4 gate) — differentiate via `thrustNewtons`/`burnTimeSeconds`/
+  `maxSpeedMetersPerSecond`/`infraredSignature` so each has a clear niche (e.g. solid =
+  cheap/short-range, ramjet = fast/long-burn but needs high entry speed conceptually,
+  scramjet = hypersonic tier).
+- [ ] Seekers: add `SemiActiveRadar`, `ActiveRadar`, `WireOrDatalinkGuided`, upgraded
+  `Optical`/`Infrared` tiers — differentiate via `detectionRangeMeters`/
+  `fieldOfViewDegrees`/`jamResistance`/`countermeasureSusceptibility`. Active radar
+  should be the first seeker type that doesn't need the launching platform to keep
+  illuminating the target (relevant once semi-active exists as a contrast).
+- [ ] Fuels: add `LiquidPropellant`, `HybridPropellant` missile fuel variants
+  differentiated via `energyDensityMjPerKg`/`capacityKg`/`volatility` (volatility
+  matters once splash damage from a fuel-tank hit becomes a system — see 2C/Phase 3).
+- [ ] Countermeasures: add multiple tiers (basic flare/chaff → RCS-shaping →
+  thrust-vectoring maneuverability package), each modifying a different subset of
+  `radarCrossSectionMultiplier`/`infraredSignatureMultiplier`/`maxGForceBonus`/
+  `decoyCharges`/`decoySuccessChance` rather than one part doing everything.
+- [ ] Jamming/counter-jamming: add missile-mountable ECM (jamming) and ECCM
+  (counter-jamming) modules at increasing tiers, per `JammingDefinition`.
+- [ ] Extend `Phase1DataSeeder` (or split into a new `Phase2MissilePartSeeder`) to
+  create all of the above as real assets under `Assets/_Project/Data/Missiles/`.
+
+**Technical notes:** No new component types needed — this is pure content authored
+against the existing `PartDefinition` subclasses. The main design work is tuning
+numbers so choices are genuine trade-offs (heavier payload = less range/maneuverability,
+better seeker = more mass/cost, etc.), not strictly-better upgrades. Consider a short
+spreadsheet/table pass outside Unity to sanity-check the numbers before creating assets.
+
+**Exit criteria:** Every `PartCategory.Missile*` enum value has at least 2–3 real assets
+spanning Tier 0–2, each with a clear reason to pick it over the others.
+
+---
+
+#### 2B — Drone Part Breadth
+**Goal:** Same as 2A, for drones — genuine propulsion/airframe/hull trade-offs across the tier spectrum.
+
+- [ ] Propulsion: add `SubsonicJet` and `SupersonicJet` tiers alongside the existing
+  `Electric` — this is the point where `FlightBody.orientToVelocity` and the
+  "quadcopter vs. plane" distinction (from Phase 1 playtesting) becomes a real gameplay
+  choice: electric = omnidirectional/hover, jet = forward-flight/banking. Add an
+  `orientToVelocity`-equivalent flag to `PropulsionDefinition` so `VehicleFactory` can
+  read it instead of hardcoding "all drones are quadcopters."
+- [ ] Airframe classes: add `FixedWing`, `FlyingWingStealth`, `CcaScale` assets (the
+  enum already exists on `DroneAirframeDefinition`) — differentiate via
+  `hardpointCount`/`internalBayCount`/`baseRadarCrossSection`/`dragCoefficient`, with
+  `FlyingWingStealth` specifically having a much lower `baseRadarCrossSection` and
+  `internalBayCount` (stealth means internal weapons carriage).
+  Fixed-wing airframes need `orientToVelocity = true` propulsion pairing to make sense.
+- [ ] Wing/propeller types: add `FixedWing`, `DeltaWing`, `VariableSweepWing` assets
+  (enum already exists on `WingOrPropellerDefinition`) with genuine speed-vs-maneuver
+  trade-offs via `liftCoefficient`/`turnRateDegreesPerSecond`/`cruiseEfficiencyMultiplier`.
+- [ ] Hull materials: add `AluminumAlloy`, `CarbonFiber`, `RadarAbsorbentMaterial`,
+  `TitaniumAlloy` (enum already exists) — RAM should meaningfully cut RCS at a
+  mass/cost premium; titanium should raise `maxTemperatureCelsius` for supersonic tiers.
+- [ ] Engines/fuel: add jet-appropriate `DroneEngineDefinition`/`FuelDefinition`
+  (JetFuel type) pairing with the new propulsion tiers.
+- [ ] Weapon bays: add larger/internal bay variants (`isInternal = true` matters once
+  stealth RCS is a system — an external hardpoint should add exposed RCS that an
+  internal bay doesn't).
+- [ ] Extend the seeder to create all of the above under `Assets/_Project/Data/Drones/`.
+
+**Technical notes:** The propulsion/orientation flag change touches `VehicleFactory`
+(read the flag instead of the current hardcoded `orientToVelocity = false`) — do this
+as one small, isolated change with a headless regression check on the Phase 1 combat
+scene (electric quadcopters must keep behaving exactly as before) before adding jet
+content on top.
+
+**Exit criteria:** Every `PartCategory.Drone*` enum value has at least 2–3 real assets;
+a fixed-wing supersonic jet drone and an electric quadcopter both exist and both fly
+according to their own propulsion model.
+
+---
+
+#### 2C — Guidance & Sensor Depth
+**Goal:** Combat mechanics gain real depth once there's seeker/jamming variety to test against (do this after 2A).
+
+- [ ] **Proportional navigation** guidance law: new `ProportionalNavigation :
+  IGuidanceLaw` in `Simulation/Guidance/`, implementing true PN (steering ∝ line-of-sight
+  rate × closing velocity × navigation constant), not just pursuit. Validate headlessly
+  the same way `PursuitGuidance` was validated in Phase 0 (missile vs. weaving target,
+  confirm it out-intercepts pure pursuit at the same tuning).
+  `WeaponController`/`GuidanceController` need a way to pick the guidance law based on
+  the missile's `SeekerDefinition.seekerType` (e.g. wire/datalink-guided early tiers
+  stay on pursuit, radar-seeker tiers get PN).
+- [ ] **Datalink mid-course update**: for `WireOrDatalinkGuided`/`ActiveRadar` missiles
+  with a `DatalinkNetworkDefinition.supportsMidCourseUpdates` platform, the missile
+  should fly toward a periodically-updated target position/velocity relayed from the
+  launching platform (using whatever contact TeamAwareness has) rather than needing its
+  own seeker lock for the whole flight, only activating its own seeker for terminal
+  homing within `SeekerDefinition.detectionRangeMeters`. New `DatalinkMidCourseGuidance`
+  or a wrapper that switches from "fly to relayed position" to the missile's own
+  `IGuidanceLaw` once in seeker range.
+- [ ] **Probabilistic detection**: replace `DetectionSensor`'s binary
+  distance-vs-effective-range check with a probability curve (e.g. detection chance
+  falls off with distance/RCS rather than a hard cutoff) and add intermittent contact
+  loss/reacquisition (using `SeekerDefinition.reacquisitionTimeSeconds`, currently
+  unused). This is also where `MissileAirframeDefinition.baseRadarCrossSection` and
+  countermeasure RCS multipliers actually start to matter tactically instead of just
+  changing a hard range number.
+- [ ] **Jamming/counter-jamming**: `JammingDefinition.jammingStrength`/`jammingRangeMeters`
+  should degrade nearby enemy `DetectionSensor` lock probability/quality within range;
+  `counterJammingStrength` on the target's own systems should offset it. Needs a way for
+  `DetectionSensor` to query nearby active jammers (similar brute-force scan pattern as
+  today, replace with spatial query in the Phase 2/3 performance pass, not now).
+- [ ] Countermeasure decoys (`decoyCharges`/`decoySuccessChance`) should give a
+  currently-locked missile a chance to break lock/retarget a decoy instead — needs a
+  "counter-fire" player/AI action and a check in the guidance/seeker update loop.
+
+**Technical notes:** Keep `IGuidanceLaw` as the extension point — don't special-case
+missile behavior outside it. Add a small headless regression test scene (reuse the
+`Phase1BatchRunner` pattern) specifically for guidance law comparison: same start
+conditions, swap the guidance law, compare hit rate/time-to-intercept.
+
+**Exit criteria:** A player can tell the difference in a fight between a pursuit-guided
+missile, a PN-guided missile, and a datalink+PN missile; jamming/countermeasures
+visibly affect whether a shot connects.
+
+---
+
+#### 2D — AI Depth
+**Goal:** CPU opponents stop being a single patrol→engage FSM and start having distinct roles.
+
+- [ ] **Interceptor** archetype: aggressive, prioritizes closing distance and engaging
+  the player's strike drone specifically (today's `EnemyDroneAI` is close to this
+  already — formalize it as one archetype rather than "the" AI).
+  - [ ] **Scout-hunter** archetype: prioritizes targeting known/likely scout drones
+  first (since killing the scout blinds the player's TeamAwareness) — needs
+  `TeamAwareness` to expose "is this contact a scout" (e.g. via
+  `SensorSuiteDefinition.sharesContactsWithTeam` on the spawned unit) so the AI can
+  discriminate targets, not just "nearest."
+- [ ] **SAM site** archetype: static (or minimally-mobile) `BaseDefenseDefinition`-driven
+  unit with a fixed position, long engagement range, high rate of fire — needs its own
+  spawner path (not `VehicleFactory.SpawnDrone`, since it's not a drone) and a simple
+  "engage anything in range" controller rather than patrol/pursuit logic.
+- [ ] Replace/augment the current hand-rolled FSM (`EnemyAIState` enum + `if`/`else` in
+  `EnemyDroneAI`) with actual behavior trees once there are 3+ archetypes sharing
+  building blocks (detect, evade, engage, retreat-when-low-health) — evaluate Unity's
+  Behavior package (per the original tech stack notes) vs. continuing hand-rolled FSMs;
+  don't adopt a framework speculatively, decide once the archetype count makes shared
+  nodes clearly worth it.
+- [ ] AI should react to being jammed/detected-by-countermeasure (from 2C) — e.g. break
+  off or use its own countermeasures — otherwise 2C's systems are invisible to the AI
+  side of the fight.
+
+**Technical notes:** Keep archetypes as separate MonoBehaviours (like today's
+`EnemyDroneAI`/`ScoutPatrol` split) rather than one mega-controller with branching
+modes — matches the existing pattern and keeps each headlessly testable in isolation.
+
+**Exit criteria:** A single battle can contain an interceptor, a scout-hunter, and a
+SAM site simultaneously, each behaving visibly differently.
+
+---
+
+#### 2E — Maps & Scenarios
+**Goal:** Combat isn't just "one flat arena, kill everything" anymore.
+
+- [ ] At least 2–3 additional arena layouts (terrain variation, cover, different
+  engagement distances) — reuse `Phase1CombatSceneBuilder`'s scripted-scene-construction
+  pattern rather than hand-placing in the Editor, so maps stay reproducible/diffable.
+- [ ] At least one non-skirmish objective type (e.g. "destroy the enemy launch
+  platform/base installation" rather than "destroy all enemy units") — needs
+  `CombatManager`'s win condition to become pluggable (an `IObjective`/strategy
+  interface) rather than the current hardcoded "all enemy `Health` destroyed."
+- [ ] Scenario selection needs a place to live — likely a small scenario-picker screen
+  before entering Combat, or a dropdown in the Workshop's "Enter Combat" flow.
+
+**Technical notes:** This is a good place to introduce a lightweight `ScenarioDefinition`
+ScriptableObject (scene reference + objective type + starting unit placements) so
+`Phase1CombatSceneBuilder`-style tools and `CombatManager` both read from one data
+source instead of each scene hardcoding its own setup.
+
+**Exit criteria:** Player can choose between at least 2 scenarios with different maps
+and at least one has a non-"kill everything" win condition.
+
+---
+
+#### 2F — Base-Building / Support Architecture
+**Goal:** Launch platforms, radar installations, datalink, and point defense become placeable, not implicit.
+
+- [ ] A pre-combat "placement" phase/mode where the player positions
+  `LaunchPlatformDefinition`/`RadarInstallationDefinition`/`BaseDefenseDefinition`
+  instances within a designated zone before the battle starts (or before an
+  objective-based scenario's timer starts).
+- [ ] Placed installations need their own spawner (parallel to `VehicleFactory`, since
+  they're static/semi-static, not flying units) and their own `Health`/`DetectionSensor`
+  wiring so they participate in win/lose and detection like any other unit.
+- [ ] `DatalinkNetworkDefinition` needs to actually gate the mid-course guidance/seeker
+  handoff features built in 2C — without a placed datalink installation (or one on the
+  launch platform itself), those features shouldn't be available.
+- [ ] Basic placement UI — given the "ugly art is fine" precedent from Phase 1, an
+  OnGUI or simple drag-in-3D-space placement tool is acceptable for Phase 2; save the
+  polished UI for Phase 3.
+
+**Technical notes:** This is the most UI-heavy sub-milestone in Phase 2 — timebox it. If
+placement UI turns into a rabbit hole, ship a simplified version (e.g. pick from a
+handful of preset placement slots rather than freeform placement) and revisit freeform
+placement in Phase 3's UI/UX pass.
+
+**Exit criteria:** A player can place at least a launch platform and a radar
+installation before a battle, and both are destructible, detectable targets during it.
+
+---
+
+#### 2G — Workshop Test Range
+**Goal:** Let the player validate a design's real flight/combat behavior before spending resources committing to an actual battle.
+
+- [ ] A "Test Range" mode reachable from the Workshop: spawns the player's current
+  design (via the same `VehicleFactory` combat uses) against one or more stationary or
+  simple-moving dummy targets, using the exact same simulation as real combat — this is
+  explicitly the payoff of the "one data-driven part/stat model" principle from the
+  plan's Concept Summary.
+  - [ ] No win/lose consequences, no currency cost/reward — purely observational
+  (distance closed, hit/miss, time-to-kill against a dummy).
+- [ ] Reuse `Phase1CombatSceneBuilder`'s patterns for constructing the test range scene;
+  reuse `Phase0TestHarness`-style telemetry logging so test-range results are inspectable
+  the same way Phase 0's validation was (this doubles as a fast manual/headless sanity
+  check any time new parts are added in 2A/2B).
+- [ ] `WorkshopController` needs a button/flow to enter test range with the currently
+  previewed design, and a way to return to the Workshop afterward (mirroring
+  `CombatManager`'s return-to-Workshop flow, but without the currency award).
+
+**Technical notes:** This is the cheapest sub-milestone to build once 2A/2B exist,
+since it's almost entirely reuse of existing spawner/scene-building/telemetry code with
+new scene content and a UI entry point — a good candidate to build early or interleaved
+with 2A/2B rather than strictly last.
+
+**Exit criteria:** Player can fire a design at a dummy target from the Workshop without
+entering a real battle, and see basic hit/miss/timing feedback.
+
+---
+
+**Phase 2 overall exit criteria:** All part categories from the design doc exist in
+some form with genuine trade-offs; a player can progress from grenade-drone tier
+through to at least early supersonic/guided-missile tier; combat has visible depth
+beyond "fly at the dot and shoot"; at least one scenario has a non-skirmish objective.
 
 ---
 
