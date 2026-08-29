@@ -1,186 +1,175 @@
 # Vanquish — Development Plan
 
+## Project Philosophy & Core Priority
+**Core First, Breadth Second:** The primary objective is to build a solid, functional baseline simulation loop before expanding into high-tier parts, micro-tuning sub-menus, or secondary mechanics. Data structures must be built to accommodate future expansion, but initial execution must focus on getting immediate phases fully operational end-to-end.
+
+---
+
 ## Concept Summary
 
 Vanquish is a two-mode combat game built in Unity (C#):
 
-1. **Workshop / R&D mode** — research, design, and test missiles, drones, and support
-   infrastructure from modular parts.
-2. **Combat mode** — deploy your designs in real-time battles against escalating CPU
-   opponents, from small grenade-drop drones up to supersonic stealth CCA-style drones
-   armed with hypersonic air-to-air missiles.
+1. **Workshop / R&D mode** — research, assemble, fine-tune, and visually inspect modular missiles, drones, and support infrastructure within strict mass and power constraints.
+2. **Combat & Sandbox Campaign mode** — deploy your designs across a dynamic, territory-based campaign map and real-time tactical battles, progressing from Cold War hardware up to cutting-edge stealth CCA platforms and hypersonic air-to-air missiles.
 
-Both modes share one data-driven part/stat model so that "testing" a design in the
-workshop uses the exact same simulation as live combat.
+Both modes share one unified, data-driven physics model so that testing a design in the workshop uses the exact same simulation as live combat.
 
 ---
 
 ## Core Systems
 
-### Missile components
-- Payload (type, size, yield/blast radius, guidance-compatible fusing)
-- Engine (solid/liquid/ramjet/scramjet, thrust curve, burn time)
-- Airframe materials (mass, drag coefficient, heat resistance)
-- Seeker (IR, radar/active-radar, semi-active, wire/datalink, optical)
-- Fuel type (solid propellant, liquid, hybrid)
-- Countermeasures (chaff/flare dispensers, maneuverability/agility packages, RCS-reducing shaping)
-- Jamming / counter-jamming modules (ECM, ECCM, seeker resistance)
+### Mass Budget & Engineering Trade-offs
+- **Maximum Take-Off Weight (MTOW)**: Every airframe and missile hull enforces a strict MTOW limit. Players trade off dry mass, engine weight, warhead mass, and fuel volume.
+- **Discrete Parts vs. Continuous Loadouts**:
+  - *Discrete Selection*: Airframes, engines, warheads, seekers, and coatings have fixed dry mass, cost, and baseline stats.
+  - *Continuous Sliders*: Variable fuel/propellant fill levels and battery cell counts.
+- **Estimated vs. Empirical Telemetry**: The Workshop UI displays *Estimated Range*, *Estimated Burn Time*, and *Estimated Thrust-to-Weight Ratio (TWR)* based on theoretical calculations. Environmental variables (drag, wind, altitude) make empirical validation in the Test Range necessary for exact performance curves.
 
-### Drone components
-- Propulsion (electric, subsonic jet, supersonic jet)
-- Airframe class (small quad, fixed-wing, flying-wing stealth, CCA-scale)
-- Wing/propeller types (efficiency vs. speed vs. maneuverability trade-offs)
-- Hull material (composite, metal alloy, radar-absorbent material)
-- Engine (matched to propulsion type; power output, fuel consumption, heat signature)
-- Fuel type (battery, jet fuel, hybrid)
-- Weapon bay size/count (constrains payload/missile loadout)
-- Sensor suite (radar, IR/EO camera, ESM/RWR)
-- **Scout/recon variant**: long-endurance, low-signature, sensor-focused, unarmed or lightly armed — detects and marks enemy positions for other units
+### Visual Workshop Assembly & Telemetry Overlays
+- **Modular 3D Mesh Swapping**: Real-time rendering of custom designs. Changing nose cones, seekers, engines, wings/rotors, or materials instantly updates the physical 3D model on designated airframe nodes.
+- **Visual Scaling**: Continuous fuel/battery sliders physically scale internal cell/tank meshes or adjust fill levels in an transparent view mode.
+- **Toggleable Visualization Overlays**:
+  - *Internal / X-Ray Mode*: Displays internal sub-components, mass distribution, and Center of Mass (CoM) vs. Center of Lift (CoL) shifts.
+  - *Aerodynamic Airflow / Drag Mode*: Displays real-time wind-tunnel streamline vectors and drag hotspots. Mounting weapons on external hardpoints visually increases local drag turbulence, whereas internal bays maintain a clean aerodynamic profile.
 
-### Support architecture
-- Ground/carrier launch platforms
-- Radar and early-warning installations
-- Command datalink network (affects seeker handoff, jamming resistance, scout-to-strike targeting)
-- Base defenses (point-defense interceptors, SAM sites)
+### Physics, Aerodynamics & Environment
+- **3-DOF Physics Core**: Point-mass aerodynamic model calculating Thrust, Lift, Drag, and Gravity. Orientation is visually aligned to velocity (`orientToVelocity`).
+- **Modular Physics Interface (`IAerodynamicBody`)**: Decoupled interface allowing seamless expansion or post-1.0 upgrades without rewriting vehicle controllers.
+- **Atmospheric Model**: Air density ($\rho$) decays exponentially with altitude ($h$). Drag ($F_d = \frac{1}{2} \rho v^2 C_d A$), aerodynamic lift, engine oxygen efficiency, and fuel burn scale dynamically.
+- **Terrain & Line-of-Sight (LOS) Masking**: Mountains, terrain features, and weather physically block radar pings, laser designation lines, and command datalinks.
 
-### Research / Tech Tree
-- Directed-graph tech tree, tiers gated by prerequisites and in-game currency/resources
-- Each node unlocks or upgrades a specific part stat block
-- Tree spans the "full spectrum": grenade-drone tier → precision-guided tier → stealth/supersonic tier → hypersonic/CCA tier
+### Damage & Component Destruction Model
+- **Dual-Layer Health System**:
+  - *Airframe Structural HP*: Overall structural integrity. If total airframe HP reaches zero, the vehicle is destroyed immediately.
+  - *Proximity Sub-Component Damage*: Explosive blasts and proximity detonations calculate damage against individual module hitboxes (engine, fuel tank, seeker, control surfaces, rotors).
+  - *Functional Penalties*: Punctured fuel tanks accelerate fuel loss; seeker head damage breaks target tracking; rotor/wing damage degrades roll and lift control.
 
-### Combat Simulation
-- Physics-based flight (thrust, drag, lift, mass) rather than pure stat rolls
-- Guidance laws: pursuit (dumb-fire), proportional navigation (guided), datalink mid-course update + terminal seeker handoff (advanced)
-- Sensor model: detection cones, radar cross-section modified by stealth parts, jamming as lock-quality/SNR degradation
-- Scout drones feed a shared "contact picture" (fog-of-war reveal) that other units and the player can act on
-- CPU AI: finite-state/behavior-tree opponents that scale in sophistication with player tech tier
+### Guidance, Sensors & Jamming Dynamics
+- **Seeker Spectrum (Cold War → Cutting-Edge)**:
+  - *Fire-and-Forget (FAF)*: IR reticle, Imaging IR, Active Radar. Decoys (flares/chaff) trigger a direct lock-break check based on target signature versus countermeasure effectiveness.
+  - *Guided / Command*: Wire/SACLOS, Laser/Beam-riding, Semi-Active Radar (SARH), Datalink.
+- **Signal-to-Noise Ratio (SNR) Jamming**: Guided sensors experience progressive SNR degradation ("fuzzing") from active ECM until reaching burn-through distance.
+
+### Drone Propulsion & Fuel Spectrum
+- **Electric**: Battery slider, KV motor tuning (multirotors/small fixed-wing).
+- **Internal Combustion Engines (ICE)**: Petrol or Diesel fuel (high endurance, distinct thermal/acoustic signature, fixed dry engine mass).
+- **Gas Turbine / Jet**: Jet Fuel (subsonic and supersonic jet/CCA tiers).
+
+---
+
+## Sandbox Campaign & Meta-Game Loop
+
+- **Dynamic Territory Map**: Strategic overworld map divided into contested sectors, supply lines, and operational bases.
+- **Resource Acquisition & Logistics**:
+  - Win battles and capture strategic sectors to earn base currency and high-tier materials (e.g., Radar Absorbent Material, Titanium alloys, Scramjet components).
+  - Manage base infrastructure (radar networks, SAM sites, ground launch platforms) to maintain datalink coverage across contested sectors.
+- **Deployment & Interception**: Intel pings notify the player of incoming enemy strike groups, requiring fast deployment of custom-built interceptors or strike drones tailored to the specific threat.
 
 ---
 
 ## Technology Stack
 
-- **Engine**: Unity (C#), URP for rendering
-- **Data model**: ScriptableObjects for part definitions, JSON for save data/tech-tree state
-- **UI**: Unity UI Toolkit (tech tree graph view, workshop editor, HUD)
-- **Physics**: Unity PhysX (Rigidbody + custom aerodynamic force components)
-- **AI**: Unity Behavior Trees (or custom FSM to start; revisit ML-Agents post-1.0 for adaptive AI)
-- **Version control**: Git + GitHub
-- **Testing**: Unity Test Framework (EditMode for stat/data logic, PlayMode for flight/guidance behavior)
+- **Engine**: Unity (C#), URP
+- **Data Model**: ScriptableObjects for part definitions and tuning parameters; JSON for campaign state and custom design saves.
+- **UI**: Unity UI Toolkit (Tech tree graph, workshop tuning dashboard, dynamic HUD overlays, telemetry HUD).
+- **Physics**: Unity PhysX + custom 3-DOF aerodynamic force and atmospheric density components.
+- **AI**: Unity Behavior Trees / Custom FSM.
+- **Version control**: Git + GitHub.
+- **Testing**: Unity Test Framework (EditMode for stat calculation validation, PlayMode for flight/guidance aerodynamics).
 
 ---
 
 ## Phases & Milestones
 
 ### Phase 0 — Foundations (Pre-production)
-**Goal:** De-risk the technical core before building content.
-
+*Focus: Core physics, MTOW data models, and guidance math.*
 - [x] Set up Unity project, folder structure, source control, coding standards
-- [x] Define ScriptableObject schema for all part categories (missile, drone, support)
-- [x] Prototype flight physics for one drone and one missile using placeholder geometry
-- [x] Prototype one guidance law (pursuit) against a static target
-- [x] Prototype basic detection/RCS model (binary detect/no-detect first)
-- [x] Decide on save/load format (JSON) and implement bare-bones save system
-
-**Exit criteria:** A capsule-and-cube missile can be launched at a moving cube drone and
-score a hit using real physics + one guidance law, all driven by data (not hardcoded values).
+- [x] Define ScriptableObject schema for part categories, MTOW limits, and fuel sliders
+- [x] Prototype 3-DOF atmospheric flight physics (drag, lift, altitude-density drop) for one drone and missile
+- [x] Prototype basic pursuit guidance and laser line-of-sight tracking checks
+- [x] Prototype basic detection/RCS model
+- [x] Implement JSON save/load framework
 
 ---
 
 ### Phase 1 — Vertical Slice (MVP)
-**Goal:** One complete gameplay loop, minimal content, proves the concept is fun.
-
-**Workshop:**
-- [x] Basic part catalog: 1 airframe, 1 engine, 1 seeker, 1 payload per missile/drone tier (low tier only)
-- [x] Simple design editor: pick parts, see computed stats (mass, speed, range, RCS)
-- [x] Minimal tech tree: ~10 nodes, linear unlock path
-
-**Combat:**
-- [x] Single arena map
-- [x] Player controls/deploys one drone + fires one missile type
-- [x] One CPU enemy archetype (basic drone with simple FSM: patrol → detect → engage)
-- [x] One scout drone type providing basic detection/reveal
-- [x] Win/lose condition (destroy enemy base or all enemy units / player is destroyed)
-
-**Meta:**
-- [x] Currency/resource loop: win battles → earn resources → unlock next tier in workshop
-- [x] Basic HUD (health, ammo, radar/contact ping)
-
-**MVP Definition of Done:** A player can research a part, build a drone/missile loadout,
-enter combat, use a scout to find the enemy, engage and win or lose, then return to the
-workshop with earned resources. This is the minimum playable loop — ugly art is fine,
-scope of content is minimal, but the loop must be complete and fun.
+*Focus: Complete end-to-end playable loop.*
+- [x] **Workshop**: Basic parts (Tier 1 Cold War drone, Tier 1 wire/laser rocket), MTOW gauge, fuel slider, estimated range display.
+- [x] **Combat**: Single arena, player controls one drone, simple CPU enemy, basic HUD (fuel, health, lock reticle).
+- [x] **Meta**: Basic resource reward loop and tech tree unlock.
 
 ---
 
 ### Phase 2 — Content & Systems Expansion (Alpha)
-**Goal:** Flesh out the "full spectrum" — expand breadth of parts, tiers, and combat depth.
 
-Phase 2 is too large to tackle as one undifferentiated block — it's split into seven
-sub-milestones (2A–2G) with a recommended sequence based on dependencies. Each has its
-own concrete tasks, technical notes, and exit criteria so scope stays bounded and any
-one sub-milestone can be picked up, paused, or reordered without derailing the rest.
+#### 2A — Missile Part Breadth & Mass Balancing
+- [ ] Implement MTOW validation checks in missile assembly (dry mass + variable fuel slider vs. motor capacity).
+- [ ] Add payload variants (HE-Frag, Shaped Charge, Kinetic, Cluster, Grenades) with scaling mass penalties.
+- [ ] Implement engine types across full spectrum (Solid Rocket, Liquid, Ramjet, Scramjet).
+- [ ] Implement seeker spectrum: Wire/SACLOS, Laser-guided, Optical/TV, SARH, ARH, Imaging IR, Multi-spectral.
+- [ ] Implement FAF decoy checks vs. guided missile SNR "fuzzing" jamming mechanics.
+- [ ] Add countermeasure dispensers, RCS-shaping packages, ECM/ECCM modules.
 
-**Recommended order:** 2A → 2B → 2G → 2C → 2D → 2E → 2F. Content breadth (2A/2B) comes
-first because every later sub-milestone (test range, guidance depth, AI depth) is more
-meaningful once there's actually more than one option per part slot. 2G (test range) is
-cheap and high-value once that breadth exists. 2F (base building) is the most UI-heavy
-and least essential to "full spectrum" feeling real, so it's last.
+#### 2B — Drone Part Breadth & Fuel Spectrum
+- [ ] Implement MTOW validation checks in drone assembly (airframe limit vs. engine mass, payload, and fuel/battery slider).
+- [ ] Implement propulsion types: Electric (battery slider), ICE (Petrol/Diesel), Subsonic Jet (Jet Fuel), Supersonic Jet.
+- [ ] Implement rotor count & materials: Plastic, Carbon Fiber, Metal across Small/Medium/Large sizes.
+- [ ] Add airframe classes: Small Quad, Hexacopter, Fixed-Wing, Flying-Wing Stealth, CCA-scale.
+- [ ] Add material choices (Aluminum, Carbon Fiber, RAM, Titanium) affecting mass, thermal limits, and RCS.
+- [ ] Differentiate external hardpoint drag/RCS penalties vs. internal weapon bays.
 
----
+#### 2C — Guidance, Proximity Damage & Debug Telemetry
+- [ ] Add Proportional Navigation (PN) and Datalink mid-course guidance laws.
+- [ ] Implement Laser/Optical Line-of-Sight (LOS) terrain masking mechanics.
+- [ ] Implement sub-component proximity damage system (airframe HP vs. module hitboxes).
+- [ ] Build **Debug Telemetry Overlay** toggling real-time display of drag forces, air density, power/fuel burn, SNR, and flight vectors.
 
-#### 2A — Missile Part Breadth
-**Goal:** Every missile category has multiple real options with genuine trade-offs, not just Tier-0's one-of-each.
+#### 2D — AI Depth
+- [ ] Implement Interceptor, Scout-Hunter, and static SAM site AI archetypes.
+- [ ] Give AI awareness of guidance limitations (e.g., AI maneuvers behind terrain to break laser LOS or deploys decoys against FAF pings).
+- [ ] Scale AI tactics based on tech tier.
 
-- [ ] Payloads: add remaining `PayloadType` variants (ShapedCharge, Kinetic, Cluster,
-  Grenade) at multiple size tiers each (e.g. Small/Medium/Large HE-Frag), tuning
-  `warheadMassKg`/`blastRadiusMeters`/`directDamage`/`splashDamage` so size is a genuine
-  mass-vs-damage trade-off, not a strict upgrade.
-- [ ] Engines: add assets for `SolidRocket` (upgraded), `LiquidRocket`, `Ramjet`,
-  `Scramjet` (Tier 3-4 gate) — differentiate via `thrustNewtons`/`burnTimeSeconds`/
-  `maxSpeedMetersPerSecond`/`infraredSignature` so each has a clear niche (e.g. solid =
-  cheap/short-range, ramjet = fast/long-burn but needs high entry speed conceptually,
-  scramjet = hypersonic tier).
-- [ ] Seekers: add `SemiActiveRadar`, `ActiveRadar`, `WireOrDatalinkGuided`, upgraded
-  `Optical`/`Infrared` tiers — differentiate via `detectionRangeMeters`/
-  `fieldOfViewDegrees`/`jamResistance`/`countermeasureSusceptibility`. Active radar
-  should be the first seeker type that doesn't need the launching platform to keep
-  illuminating the target (relevant once semi-active exists as a contrast).
-- [ ] Fuels: add `LiquidPropellant`, `HybridPropellant` missile fuel variants
-  differentiated via `energyDensityMjPerKg`/`capacityKg`/`volatility` (volatility
-  matters once splash damage from a fuel-tank hit becomes a system — see 2C/Phase 3).
-- [ ] Countermeasures: add multiple tiers (basic flare/chaff → RCS-shaping →
-  thrust-vectoring maneuverability package), each modifying a different subset of
-  `radarCrossSectionMultiplier`/`infraredSignatureMultiplier`/`maxGForceBonus`/
-  `decoyCharges`/`decoySuccessChance` rather than one part doing everything.
-- [ ] Jamming/counter-jamming: add missile-mountable ECM (jamming) and ECCM
-  (counter-jamming) modules at increasing tiers, per `JammingDefinition`.
-- [ ] Extend `Phase1DataSeeder` (or split into a new `Phase2MissilePartSeeder`) to
-  create all of the above as real assets under `Assets/_Project/Data/Missiles/`.
+#### 2E — Maps & Scenarios
+- [ ] Multi-terrain arenas (mountainous valleys breaking LOS, high-altitude plateaus with thin air).
+- [ ] Objective-based scenarios (escort scout drone, destroy SAM network, base strike).
 
-**Technical notes:** No new component types needed — this is pure content authored
-against the existing `PartDefinition` subclasses. The main design work is tuning
-numbers so choices are genuine trade-offs (heavier payload = less range/maneuverability,
-better seeker = more mass/cost, etc.), not strictly-better upgrades. Consider a short
-spreadsheet/table pass outside Unity to sanity-check the numbers before creating assets.
+#### 2F — Support Architecture & Base Management
+- [ ] Pre-combat placement of ground launch platforms, radar sites, and datalink relays.
+- [ ] Base structures act as datalink nodes for missile mid-course updates.
 
-**Exit criteria:** Every `PartCategory.Missile*` enum value has at least 2–3 real assets
-spanning Tier 0–2, each with a clear reason to pick it over the others.
+#### 2G — Workshop Visual Assembly & Test Range
+- [ ] Implement runtime 3D modular mesh swapping logic on assembly nodes.
+- [ ] Build **Toggleable Overlays**: X-Ray / CoM / CoL view mode and visual aerodynamic airflow drag stream vectors.
+- [ ] Implement visual fuel tank / battery cell scaling tied to continuous sliders.
+- [ ] Seamless transition sequence (dynamic loading mask showing vehicle moving from editor bay to launch pad).
+- [ ] Integrated Test Range to evaluate actual flight performance vs. Workshop estimated range using Debug Telemetry.
 
 ---
 
-#### 2B — Drone Part Breadth
-**Goal:** Same as 2A, for drones — genuine propulsion/airframe/hull trade-offs across the tier spectrum.
+### Phase 3 — Dynamic Sandbox Campaign & Polish (Beta)
+- [ ] Implement sector-based dynamic overworld map with territory control and resource logistics.
+- [ ] Complete Tier 4–5 cutting-edge content (Hypersonic Air-to-Air, Stealth CCAs, Cognitive ECM).
+- [ ] Full HUD polish (Dynamic LAR reticle, LOS status indicators, SNR fuzzing overlay, RWR audio/visuals).
+- [ ] VFX/SFX pass (sonic booms, rocket plumes, thermal pings, ICE engine noise).
+- [ ] Performance optimization (projectile object pooling, physics LODs).
 
-- [ ] Propulsion: add `SubsonicJet` and `SupersonicJet` tiers alongside the existing
-  `Electric` — this is the point where `FlightBody.orientToVelocity` and the
-  "quadcopter vs. plane" distinction (from Phase 1 playtesting) becomes a real gameplay
-  choice: electric = omnidirectional/hover, jet = forward-flight/banking. Add an
-  `orientToVelocity`-equivalent flag to `PropulsionDefinition` so `VehicleFactory` can
-  read it instead of hardcoding "all drones are quadcopters."
-- [ ] Airframe classes: add `FixedWing`, `FlyingWingStealth`, `CcaScale` assets (the
-  enum already exists on `DroneAirframeDefinition`) — differentiate via
-  `hardpointCount`/`internalBayCount`/`baseRadarCrossSection`/`dragCoefficient`, with
-  `FlyingWingStealth` specifically having a much lower `baseRadarCrossSection` and
+---
+
+### Version 1.0 — Release
+- [ ] Final balance and QA pass across campaign mode and tech tree.
+- [ ] Release packaging (Steam / itch.io).
+
+---
+
+## Post-1.0 — Live Improvements
+- [ ] Thermal & High-G Material Degradation (e.g., sustained high-speed flight damaging RAM coatings or overheating engines).
+- [ ] Engine Micro-Tuning Research (unlock ability to tweak engine internals to reduce dry mass or boost thrust).
+- [ ] 6-DOF Physics Evaluation (expand `IAerodynamicBody` to support individual control surface deflections if desired).
+- [ ] Multiplayer (PvP skirmish, co-op vs. CPU).
+- [ ] Player map/scenario editor.
+- [ ] Advanced adaptive AI (ML-Agents).
+- [ ] Exotics tier (Directed Energy Weapons, Drone Swarm-Logic).
+arCrossSection` and
   `internalBayCount` (stealth means internal weapons carriage).
   Fixed-wing airframes need `orientToVelocity = true` propulsion pairing to make sense.
 - [ ] **Quadcopter → hexacopter upgrade path**: add a `rotorCount` field to
