@@ -449,6 +449,31 @@ guidance prototypes will reveal how much custom simulation work is really requir
 
 ---
 
+---
+
+## Version 2.0 — C4ISR & Tactical Theater Expansion
+
+### Core Scope
+Expand the simulation from single-craft tactical engagements into full-spectrum air defence management, airborne command (AWACS), multi-asset strike coordination, and dynamic theater control.
+
+### Features & System Milestones
+
+#### 2.0A — High-Altitude Tactical Command Interface
+- [ ] Implement seamless transition between 3rd-person direct craft piloting and the tactical theater map layer.
+- [ ] Add dynamic multi-unit command issuance (strike routes, loiter orbits, target prioritization, radar-silent holding areas).
+- [ ] Build formations and automated wingman/swarm execution logic.
+
+#### 2.0B — Integrated Air Defence Systems (IADS) & Base Engineering
+- [ ] Modular ground defence editor: Build and custom-configure short, medium, and long-range SAM batteries, radar stations, and point-defence CIWS.
+- [ ] Implement networked radar nodes: Command posts aggregate sensor feeds to allow passive/optical tracking and delayed radar illumination to minimize SEAD vulnerability.
+- [ ] Base logistics & rearm cycles for static launchers and mobile TELs (Transporter Erector Launchers).
+
+#### 2.0C — Airborne Early Warning & Cooperative Engagement (C4ISR)
+- [ ] Implement AWACS and high-altitude endurance ISR drone platforms to clear fog-of-war and maintain long-range tracking tracks.
+- [ ] Implement Cooperative Engagement Capability (CEC): Fire weapons from platform A using real-time targeting/datalink telemetry provided by platform B or ground radar networks.
+- [ ] Add electronic warfare (EW) support aircraft to project stand-off jamming corridors for incoming strike packages.
+- [ ] 
+
 ## Risks & Open Questions
 
 - **Simulation complexity vs. fun**: realistic flight/guidance physics can become fiddly, however if a decision has to be made between realism and arcadiness, pick realism. Use real world inspired parts, not sci-fi.
