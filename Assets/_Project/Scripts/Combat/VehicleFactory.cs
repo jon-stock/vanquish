@@ -123,16 +123,15 @@ namespace Vanquish.Combat
                 weapon.ownerTeam = team;
             }
 
-            GameObject visual = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            visual.name = "Visual";
-            DestroyComponent(visual.GetComponent<Collider>());
-            visual.transform.SetParent(drone.transform, worldPositionStays: false);
-            visual.transform.localPosition = Vector3.zero;
-            visual.transform.localScale = new Vector3(1.5f, 0.8f, 2f);
+            // Procedural multirotor visual (body + arms + spinning rotors) — see
+            // DroneVisualBuilder. rotorCount is hardcoded to 4 for now, matching the
+            // Tier-0 SmallQuad airframe; will read DroneAirframeDefinition.rotorCount
+            // once the quadcopter->hexacopter upgrade path (Phase 2B) exists.
+            Transform visual = DroneVisualBuilder.BuildMultirotorVisual(drone.transform, rotorCount: 4);
 
             var tilt = drone.AddComponent<QuadcopterTiltVisual>();
             tilt.body = rb;
-            tilt.visualRoot = visual.transform;
+            tilt.visualRoot = visual;
 
             if (CombatManager.Instance != null)
                 CombatManager.Instance.RegisterUnit(drone, team);
