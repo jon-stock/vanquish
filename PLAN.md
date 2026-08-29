@@ -183,6 +183,31 @@ spanning Tier 0–2, each with a clear reason to pick it over the others.
   `FlyingWingStealth` specifically having a much lower `baseRadarCrossSection` and
   `internalBayCount` (stealth means internal weapons carriage).
   Fixed-wing airframes need `orientToVelocity = true` propulsion pairing to make sense.
+- [ ] **Quadcopter → hexacopter upgrade path**: add a `rotorCount` field to
+  `DroneAirframeDefinition` (e.g. 4 for the existing `SmallQuad`, 6 for a new
+  `SmallHexa`/`MediumHexa` airframe tier). A hexacopter airframe should raise
+  `hardpointCount`/`payloadCapacityKg`-relevant carry capacity (more weapon bay
+  headroom, more sensor/countermeasure slots down the line) at the cost of higher
+  `structuralMassKg` and more rotor mass (see rotor breadth below — more rotors
+  mounted means their individual mass is paid multiple times). This is a genuine
+  mass-vs-capacity trade-off, not a strict upgrade, matching the design goal of every
+  part choice mattering. `VehicleFactory`'s procedural drone visual (see the "make the
+  block look like a quadcopter" work item) needs to read `rotorCount` and generate the
+  correct number of arms/rotors rather than hardcoding 4.
+- [ ] **Rotor material & size breadth**: expand `WingOrPropellerDefinition` (this is
+  the "rotor" part slot for multirotor drones) with a `RotorMaterial` enum (`Plastic`,
+  `CarbonFiber`, `Metal`) and a `RotorSize` enum (`Small`, `Medium`, `Large`), each
+  combination authored as its own asset:
+  - Plastic: cheapest, low mass, low durability.
+  - Carbon fibre: lightest, but weaker/less durable than plastic or metal (mass vs.
+    structural trade-off, not a strict upgrade over plastic).
+  - Metal/steel: heaviest, but strongest/most durable.
+  - Size (small/medium/large) scales `liftCoefficient` and lift capacity up with size,
+    at a mass and drag cost, independent of material choice — so e.g. "small carbon
+    fibre" and "large plastic" are both valid builds for different purposes.
+  A durability/structural-integrity stat is worth adding now even if nothing consumes
+  it yet (informational, and a hook for a future "rotor damage" mechanic — see Phase 3
+  stretch goals) so the material choice isn't purely cosmetic from day one.
 - [ ] Wing/propeller types: add `FixedWing`, `DeltaWing`, `VariableSweepWing` assets
   (enum already exists on `WingOrPropellerDefinition`) with genuine speed-vs-maneuver
   trade-offs via `liftCoefficient`/`turnRateDegreesPerSecond`/`cruiseEfficiencyMultiplier`.
