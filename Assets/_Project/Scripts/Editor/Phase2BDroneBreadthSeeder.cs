@@ -4,6 +4,7 @@ using UnityEngine;
 using Vanquish.Data;
 using Vanquish.Data.Drones;
 using Vanquish.Data.Shared;
+using Vanquish.Data.TechTree;
 
 namespace Vanquish.EditorTools
 {
@@ -31,6 +32,7 @@ namespace Vanquish.EditorTools
     {
         private const string DronesDir = "Assets/_Project/Data/Drones";
         private const string SharedDir = "Assets/_Project/Data/Shared";
+        private const string TechTreeDir = "Assets/_Project/Data/TechTree";
 
         [MenuItem("Vanquish/Phase 2B/Seed Drone Airframe Variants")]
         public static void SeedAirframeVariants()
@@ -567,6 +569,130 @@ namespace Vanquish.EditorTools
             SeedPropulsionEngineFuelVariants();
             SeedWeaponBayVariants();
             Debug.Log("[Phase2BDroneBreadthSeeder] All Phase 2B drone breadth categories seeded.");
+        }
+
+        /// <summary>
+        /// Wires every Phase 2B drone-breadth part asset (seeded by the six "Seed Drone
+        /// ..." menu items above) behind its own TechNode, so WorkshopController's part
+        /// picker (extended to drone slots alongside 2A's missile picker) has something
+        /// unlockable to show. Requires Phase1DataSeeder's Tier-0 drone nodes
+        /// (TN_06-TN_09) and all six Phase 2B variant seeders to have already run.
+        /// Idempotent, like the rest of this file and Phase2AMissileBreadthSeeder's
+        /// equivalent method.
+        /// </summary>
+        [MenuItem("Vanquish/Phase 2B/Seed Drone Breadth Tech Nodes")]
+        public static void SeedTechTreeNodes()
+        {
+            EnsureDir(TechTreeDir);
+
+            var tnDroneBasics = LoadNode("TN_06_DroneBasics");       // droneAirframe, dronePropulsion
+            var tnDronePower = LoadNode("TN_07_DronePower");         // droneEngine, droneFuel
+            var tnDroneStructure = LoadNode("TN_08_DroneStructure"); // droneWingOrPropeller, droneHullMaterial
+            var tnDroneSystems = LoadNode("TN_09_DroneSystems");     // droneWeaponBay, sensorBasic
+
+            if (tnDroneBasics == null || tnDronePower == null || tnDroneStructure == null || tnDroneSystems == null)
+            {
+                Debug.LogError("[Phase2BDroneBreadthSeeder] Missing Phase 1 drone tech nodes (TN_06-TN_09) — run " +
+                    "Vanquish/Phase 1/Seed Tier-0 Data first.");
+                return;
+            }
+
+            // ---- Airframes: Hexacopter and Fixed-Wing both branch directly off the
+            // Tier-0 drone basics node (alternative Tier 0/1 airframe philosophies, not
+            // upgrades of each other); Flying-Wing Stealth upgrades from Fixed-Wing;
+            // CCA-Scale upgrades from Flying-Wing Stealth — matching their increasing
+            // seeded tiers (1, 1, 3, 4). ----
+            CreatePartTechNode(LoadPart<DroneAirframeDefinition>("Airframe_SmallHexa"), tnDroneBasics);
+            var tnFixedWingAirframe = CreatePartTechNode(LoadPart<DroneAirframeDefinition>("Airframe_FixedWing"), tnDroneBasics);
+            var tnStealthAirframe = CreatePartTechNode(LoadPart<DroneAirframeDefinition>("Airframe_FlyingWingStealth"), tnFixedWingAirframe);
+            CreatePartTechNode(LoadPart<DroneAirframeDefinition>("Airframe_CcaScale"), tnStealthAirframe);
+
+            // ---- Rotors: all 9 Material x Size combinations branch directly off the
+            // Tier-0 drone structure node — they're alternative Tier-0 choices (material/
+            // size trade-offs), not a tiered progression, matching their seeded
+            // Tier0_Improvised tier. ----
+            foreach (RotorMaterial material in System.Enum.GetValues(typeof(RotorMaterial)))
+            {
+                foreach (RotorSize size in System.Enum.GetValues(typeof(RotorSize)))
+                {
+                    CreatePartTechNode(LoadPart<WingOrPropellerDefinition>($"Propeller_{material}_{size}"), tnDroneStructure);
+                }
+            }
+
+            // ---- Wing types: Fixed Wing -> Delta Wing -> Variable-Sweep Wing, matching
+            // their increasing seeded tiers (1, 2, 3). ----
+            var tnFixedWing = CreatePartTechNode(LoadPart<WingOrPropellerDefinition>("Wing_FixedWing"), tnDroneStructure);
+            var tnDeltaWing = CreatePartTechNode(LoadPart<WingOrPropellerDefinition>("Wing_DeltaWing"), tnFixedWing);
+            CreatePartTechNode(LoadPart<WingOrPropellerDefinition>("Wing_VariableSweepWing"), tnDeltaWing);
+
+            // ---- Hull materials: Aluminum Alloy -> Carbon Fiber -> RAM -> Titanium,
+            // matching their increasing seeded tiers (1, 2, 3, 4). ----
+            var tnAluminum = CreatePartTechNode(LoadPart<HullMaterialDefinition>("Hull_AluminumAlloy"), tnDroneStructure);
+            var tnCarbonFiber = CreatePartTechNode(LoadPart<HullMaterialDefinition>("Hull_CarbonFiber"), tnAluminum);
+            var tnRam = CreatePartTechNode(LoadPart<HullMaterialDefinition>("Hull_RadarAbsorbentMaterial"), tnCarbonFiber);
+            CreatePartTechNode(LoadPart<HullMaterialDefinition>("Hull_TitaniumAlloy"), tnRam);
+
+            // ---- Propulsion/engine/fuel: ICE and Jet Subsonic both branch directly off
+            // the Tier-0 base nodes (alternative Tier-1/2 propulsion philosophies); Jet
+            // Supersonic upgrades from Jet Subsonic, matching their seeded tiers. ----
+            CreatePartTechNode(LoadPart<PropulsionDefinition>("Propulsion_ICE_Basic"), tnDroneBasics);
+            CreatePartTechNode(LoadPart<DroneEngineDefinition>("Engine_ICE_Basic"), tnDronePower);
+            CreatePartTechNode(LoadPart<FuelDefinition>("Fuel_Petrol_Basic", SharedDir), tnDronePower);
+            CreatePartTechNode(LoadPart<FuelDefinition>("Fuel_Diesel_Basic", SharedDir), tnDronePower);
+
+            var tnJetSubsonicPropulsion = CreatePartTechNode(LoadPart<PropulsionDefinition>("Propulsion_Jet_Subsonic"), tnDroneBasics);
+            var tnJetSubsonicEngine = CreatePartTechNode(LoadPart<DroneEngineDefinition>("Engine_Jet_Subsonic"), tnDronePower);
+            CreatePartTechNode(LoadPart<FuelDefinition>("Fuel_JetFuel_Basic", SharedDir), tnDronePower);
+
+            CreatePartTechNode(LoadPart<PropulsionDefinition>("Propulsion_Jet_Supersonic"), tnJetSubsonicPropulsion);
+            CreatePartTechNode(LoadPart<DroneEngineDefinition>("Engine_Jet_Supersonic"), tnJetSubsonicEngine);
+
+            // ---- Weapon bays: Large (external) branches off the Tier-0 drone systems
+            // node; Internal Medium upgrades from Large, matching their seeded tiers
+            // (1, 3). ----
+            var tnLargeBay = CreatePartTechNode(LoadPart<WeaponBayDefinition>("WeaponBay_Large"), tnDroneSystems);
+            CreatePartTechNode(LoadPart<WeaponBayDefinition>("WeaponBay_InternalMedium"), tnLargeBay);
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.Log("[Phase2BDroneBreadthSeeder] Seeded 31 TechNodes (TN_2B_*) gating the Phase 2B drone " +
+                "breadth variants under Assets/_Project/Data/TechTree/. Re-run Vanquish/Phase 1/Build Workshop " +
+                "Scene to pick these up in WorkshopController's tech tree list and drone part picker.");
+        }
+
+        private static TechNode LoadNode(string assetName)
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<TechNode>($"{TechTreeDir}/{assetName}.asset");
+            if (asset == null)
+                Debug.LogError($"[Phase2BDroneBreadthSeeder] Could not load tech node {assetName}.");
+            return asset;
+        }
+
+        private static T LoadPart<T>(string assetName, string dir = DronesDir) where T : PartDefinition
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<T>($"{dir}/{assetName}.asset");
+            if (asset == null)
+                Debug.LogError($"[Phase2BDroneBreadthSeeder] Could not load part {assetName} — run the relevant " +
+                    "'Seed Drone ... Variants' menu item first.");
+            return asset;
+        }
+
+        /// <summary>Creates (or updates) a TechNode named "TN_2B_&lt;part.id&gt;" that unlocks exactly one part.</summary>
+        private static TechNode CreatePartTechNode(PartDefinition part, params TechNode[] prerequisites)
+        {
+            if (part == null)
+                return null;
+
+            string nodeId = $"TN_2B_{part.id}";
+            return CreateOrReplace<TechNode>($"{TechTreeDir}/{nodeId}.asset", n =>
+            {
+                n.id = nodeId;
+                n.displayName = part.displayName;
+                n.tier = part.tier;
+                n.researchCost = part.researchCost;
+                n.prerequisites = prerequisites ?? new TechNode[0];
+                n.unlocks = new PartDefinition[] { part };
+            });
         }
 
         private static T CreateOrReplace<T>(string path, System.Action<T> configure) where T : ScriptableObject

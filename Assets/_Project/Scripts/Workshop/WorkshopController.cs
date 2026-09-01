@@ -13,12 +13,14 @@ namespace Vanquish.Workshop
 {
     /// <summary>
     /// Workshop: shows the linear tech tree with unlock buttons, a real multi-option
-    /// part picker for missile slots that have more than one unlocked variant (2A part
-    /// breadth), the resulting missile/drone design's computed stats once enough parts
-    /// are unlocked, and a button to enter combat. Built with UI Toolkit (UIDocument +
-    /// Workshop.uxml/.uss under Assets/_Project/UI/Workshop/) rather than OnGUI.
-    /// Phase1WorkshopSceneBuilder wires the UIDocument's visualTreeAsset/panelSettings
-    /// and all the part option arrays when it builds the scene.
+    /// part picker for every missile (2A) and drone (2B) slot that has more than one
+    /// unlocked variant, the resulting missile/drone design's computed stats once
+    /// enough parts are unlocked, and a button to enter combat. Built with UI Toolkit
+    /// (UIDocument + Workshop.uxml/.uss under Assets/_Project/UI/Workshop/) rather than
+    /// OnGUI. Phase1WorkshopSceneBuilder wires the UIDocument's
+    /// visualTreeAsset/panelSettings and all the part option arrays when it builds the
+    /// scene. Sensor suites (basic/scout) stay single-option fields rather than picker
+    /// slots since they're fixed by drone role (strike vs. scout), not a player choice.
     /// </summary>
     [RequireComponent(typeof(UIDocument))]
     public class WorkshopController : MonoBehaviour
@@ -40,15 +42,19 @@ namespace Vanquish.Workshop
         [Tooltip("Optional slot — a design can have no jamming/ECM equipment equipped.")]
         public JammingDefinition[] missileJammingOptions;
 
-        public PropulsionDefinition dronePropulsion;
-        public DroneAirframeDefinition droneAirframe;
-        public WingOrPropellerDefinition droneWing;
-        public HullMaterialDefinition droneHull;
-        public DroneEngineDefinition droneEngine;
-        public FuelDefinition droneFuel;
-        public WeaponBayDefinition droneWeaponBay;
+        [Header("Drone: single-option slots (only one variant seeded so far)")]
         public SensorSuiteDefinition droneSensorBasic;
         public SensorSuiteDefinition droneSensorScout;
+
+        [Header("Drone: multi-option picker slots (2B part breadth)")]
+        [Tooltip("Every candidate propulsion type, unlocked or not — the picker filters to unlocked options at runtime.")]
+        public PropulsionDefinition[] dronePropulsionOptions;
+        public DroneAirframeDefinition[] droneAirframeOptions;
+        public WingOrPropellerDefinition[] droneWingOptions;
+        public HullMaterialDefinition[] droneHullOptions;
+        public DroneEngineDefinition[] droneEngineOptions;
+        public FuelDefinition[] droneFuelOptions;
+        public WeaponBayDefinition[] droneWeaponBayOptions;
 
         [Header("Continuous Sliders")]
         [Tooltip("Missile fuel tank fill level (0-1). Trades range/burn time against mass and MTOW headroom.")]
@@ -63,6 +69,15 @@ namespace Vanquish.Workshop
         private MissilePayloadDefinition _selectedPayload;
         private CountermeasureDefinition _selectedCountermeasure; // optional, may stay null
         private JammingDefinition _selectedJamming; // optional, may stay null
+
+        // Current picker selections for the multi-option drone slots above (2B).
+        private PropulsionDefinition _selectedDronePropulsion;
+        private DroneAirframeDefinition _selectedDroneAirframe;
+        private WingOrPropellerDefinition _selectedDroneWing;
+        private HullMaterialDefinition _selectedDroneHull;
+        private DroneEngineDefinition _selectedDroneEngine;
+        private FuelDefinition _selectedDroneFuel;
+        private WeaponBayDefinition _selectedDroneWeaponBay;
 
         private UIDocument _document;
         private Label _currencyLabel;
@@ -210,8 +225,17 @@ namespace Vanquish.Workshop
             _selectedCountermeasure = ResolveOptionalSelection(progress, missileCountermeasureOptions, _selectedCountermeasure);
             _selectedJamming = ResolveOptionalSelection(progress, missileJammingOptions, _selectedJamming);
 
+            _selectedDronePropulsion = ResolveSelection(progress, dronePropulsionOptions, _selectedDronePropulsion);
+            _selectedDroneAirframe = ResolveSelection(progress, droneAirframeOptions, _selectedDroneAirframe);
+            _selectedDroneWing = ResolveSelection(progress, droneWingOptions, _selectedDroneWing);
+            _selectedDroneHull = ResolveSelection(progress, droneHullOptions, _selectedDroneHull);
+            _selectedDroneEngine = ResolveSelection(progress, droneEngineOptions, _selectedDroneEngine);
+            _selectedDroneFuel = ResolveSelection(progress, droneFuelOptions, _selectedDroneFuel);
+            _selectedDroneWeaponBay = ResolveSelection(progress, droneWeaponBayOptions, _selectedDroneWeaponBay);
+
             _partPickerScroll.contentContainer.Clear();
 
+            _partPickerScroll.contentContainer.Add(BuildPickerSectionHeader("Missile Loadout"));
             _partPickerScroll.contentContainer.Add(BuildPartSlotRow("Payload", missilePayloadOptions, progress,
                 _selectedPayload, allowNone: false, onSelect: selected => { _selectedPayload = selected; RefreshDesignPreview(progress); }));
             _partPickerScroll.contentContainer.Add(BuildPartSlotRow("Engine", missileEngineOptions, progress,
@@ -222,6 +246,29 @@ namespace Vanquish.Workshop
                 _selectedCountermeasure, allowNone: true, onSelect: selected => { _selectedCountermeasure = selected; RefreshDesignPreview(progress); }));
             _partPickerScroll.contentContainer.Add(BuildPartSlotRow("Jamming / ECM", missileJammingOptions, progress,
                 _selectedJamming, allowNone: true, onSelect: selected => { _selectedJamming = selected; RefreshDesignPreview(progress); }));
+
+            _partPickerScroll.contentContainer.Add(BuildPickerSectionHeader("Drone Loadout"));
+            _partPickerScroll.contentContainer.Add(BuildPartSlotRow("Propulsion", dronePropulsionOptions, progress,
+                _selectedDronePropulsion, allowNone: false, onSelect: selected => { _selectedDronePropulsion = selected; RefreshDesignPreview(progress); }));
+            _partPickerScroll.contentContainer.Add(BuildPartSlotRow("Airframe", droneAirframeOptions, progress,
+                _selectedDroneAirframe, allowNone: false, onSelect: selected => { _selectedDroneAirframe = selected; RefreshDesignPreview(progress); }));
+            _partPickerScroll.contentContainer.Add(BuildPartSlotRow("Wing / Rotor", droneWingOptions, progress,
+                _selectedDroneWing, allowNone: false, onSelect: selected => { _selectedDroneWing = selected; RefreshDesignPreview(progress); }));
+            _partPickerScroll.contentContainer.Add(BuildPartSlotRow("Hull Material", droneHullOptions, progress,
+                _selectedDroneHull, allowNone: false, onSelect: selected => { _selectedDroneHull = selected; RefreshDesignPreview(progress); }));
+            _partPickerScroll.contentContainer.Add(BuildPartSlotRow("Engine", droneEngineOptions, progress,
+                _selectedDroneEngine, allowNone: false, onSelect: selected => { _selectedDroneEngine = selected; RefreshDesignPreview(progress); }));
+            _partPickerScroll.contentContainer.Add(BuildPartSlotRow("Fuel", droneFuelOptions, progress,
+                _selectedDroneFuel, allowNone: false, onSelect: selected => { _selectedDroneFuel = selected; RefreshDesignPreview(progress); }));
+            _partPickerScroll.contentContainer.Add(BuildPartSlotRow("Weapon Bay", droneWeaponBayOptions, progress,
+                _selectedDroneWeaponBay, allowNone: false, onSelect: selected => { _selectedDroneWeaponBay = selected; RefreshDesignPreview(progress); }));
+        }
+
+        private static VisualElement BuildPickerSectionHeader(string text)
+        {
+            var header = new Label(text);
+            header.AddToClassList("part-picker-section-header");
+            return header;
         }
 
         private VisualElement BuildPartSlotRow<T>(string slotLabel, T[] options, PlayerProgress progress, T selected,
@@ -415,13 +462,13 @@ namespace Vanquish.Workshop
             if (progress == null)
                 return false;
 
-            loadout.propulsion = IsUnlocked(progress, dronePropulsion) ? dronePropulsion : null;
-            loadout.airframe = IsUnlocked(progress, droneAirframe) ? droneAirframe : null;
-            loadout.wingOrPropeller = IsUnlocked(progress, droneWing) ? droneWing : null;
-            loadout.hullMaterial = IsUnlocked(progress, droneHull) ? droneHull : null;
-            loadout.engine = IsUnlocked(progress, droneEngine) ? droneEngine : null;
-            loadout.fuel = IsUnlocked(progress, droneFuel) ? droneFuel : null;
-            loadout.weaponBay = IsUnlocked(progress, droneWeaponBay) ? droneWeaponBay : null;
+            loadout.propulsion = IsUnlocked(progress, _selectedDronePropulsion) ? _selectedDronePropulsion : null;
+            loadout.airframe = IsUnlocked(progress, _selectedDroneAirframe) ? _selectedDroneAirframe : null;
+            loadout.wingOrPropeller = IsUnlocked(progress, _selectedDroneWing) ? _selectedDroneWing : null;
+            loadout.hullMaterial = IsUnlocked(progress, _selectedDroneHull) ? _selectedDroneHull : null;
+            loadout.engine = IsUnlocked(progress, _selectedDroneEngine) ? _selectedDroneEngine : null;
+            loadout.fuel = IsUnlocked(progress, _selectedDroneFuel) ? _selectedDroneFuel : null;
+            loadout.weaponBay = IsUnlocked(progress, _selectedDroneWeaponBay) ? _selectedDroneWeaponBay : null;
 
             SensorSuiteDefinition sensor = useScoutSensor ? droneSensorScout : droneSensorBasic;
             loadout.sensorSuite = IsUnlocked(progress, sensor) ? sensor : null;

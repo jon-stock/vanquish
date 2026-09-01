@@ -118,7 +118,7 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
---- !u!1 &561728285
+--- !u!1 &1734300573
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -126,9 +126,9 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 561728288}
-  - component: {fileID: 561728287}
-  - component: {fileID: 561728286}
+  - component: {fileID: 1734300576}
+  - component: {fileID: 1734300575}
+  - component: {fileID: 1734300574}
   m_Layer: 0
   m_Name: WorkshopController
   m_TagString: Untagged
@@ -136,13 +136,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &561728286
+--- !u!114 &1734300574
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 561728285}
+  m_GameObject: {fileID: 1734300573}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bbaacb4651ba0014e9f9f76b08967f2f, type: 3}
@@ -177,6 +177,37 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 3b329bba800ae894db71c541705d4ab2, type: 2}
   - {fileID: 11400000, guid: 89a0bb42cd919ed42ad43446ef697c66, type: 2}
   - {fileID: 11400000, guid: fc3f7aa7e5f68cf45bb29ab3a81fdb31, type: 2}
+  - {fileID: 11400000, guid: caeee73f4dc4bb34d8bf8a10ca583f8a, type: 2}
+  - {fileID: 11400000, guid: 4dceaf73eb04efe4695c27073faad801, type: 2}
+  - {fileID: 11400000, guid: 08146eedff67a6546941ce7dcc1ca505, type: 2}
+  - {fileID: 11400000, guid: 1c5d348d3f95e234dacfa7ae35c87673, type: 2}
+  - {fileID: 11400000, guid: 934d6aa2ebd017548b84810d02c260a8, type: 2}
+  - {fileID: 11400000, guid: c1d303aa4bc17004aaec8c1124cdf36a, type: 2}
+  - {fileID: 11400000, guid: 3ac71f37245dbb1419b2b884d04619f9, type: 2}
+  - {fileID: 11400000, guid: f314a24d6772bf94ea0dac26d7fe790c, type: 2}
+  - {fileID: 11400000, guid: bde83d2db43904a4a8b64a9667d3ab29, type: 2}
+  - {fileID: 11400000, guid: a0c25723348d97a49b8696acd0b7573f, type: 2}
+  - {fileID: 11400000, guid: 819e68c40413dc54da6e71e405d5fe61, type: 2}
+  - {fileID: 11400000, guid: d4da366fe0eef914c8c94d331b9a66f1, type: 2}
+  - {fileID: 11400000, guid: 6e826ee10d206084199a39effd1e6b9b, type: 2}
+  - {fileID: 11400000, guid: eb7eab675e2df7645aada7bf17a5d0ee, type: 2}
+  - {fileID: 11400000, guid: cb4bbd2f6a257ef4f801a1357dcb0d2b, type: 2}
+  - {fileID: 11400000, guid: 884b8453ae3742947a67427a2d2897b1, type: 2}
+  - {fileID: 11400000, guid: f021ffb321411f64c86483658967ee37, type: 2}
+  - {fileID: 11400000, guid: f6b703e0538b6d14bad2cbd7fbaa6247, type: 2}
+  - {fileID: 11400000, guid: 0ce7ca6be0d7e014291f77a8b1fbc8c5, type: 2}
+  - {fileID: 11400000, guid: 38864395aa147634fa3a83bff4df037f, type: 2}
+  - {fileID: 11400000, guid: 1b8fa49dc47581648b21f9947939afc5, type: 2}
+  - {fileID: 11400000, guid: ff303002d6cef314da10bb926f8989fa, type: 2}
+  - {fileID: 11400000, guid: 5975167c2a8c3eb4aa4329d146611d00, type: 2}
+  - {fileID: 11400000, guid: dcff90f6c8a55014189acd6a0d32390b, type: 2}
+  - {fileID: 11400000, guid: 5ce3197aa28f2ae45b42c69bd4f95f2a, type: 2}
+  - {fileID: 11400000, guid: a5d3b1ccb90401842b70540ef77e0312, type: 2}
+  - {fileID: 11400000, guid: 11d66cf42a444884cafa64f31ba4657b, type: 2}
+  - {fileID: 11400000, guid: d209252690c8bb84abace6d824098cd5, type: 2}
+  - {fileID: 11400000, guid: 37a707b9a6380ce4c9a8f8f5f5a28305, type: 2}
+  - {fileID: 11400000, guid: a12486bb4ec9fee4cb77a75fea88d2a4, type: 2}
+  - {fileID: 11400000, guid: 2faa5eec3778f9749863030f21268d09, type: 2}
   combatSceneName: Combat_Arena01
   missileAirframe: {fileID: 11400000, guid: 978e5dec3b2fe354ba9dfc39421a4393, type: 2}
   missileFuel: {fileID: 11400000, guid: 1e0a581977b7cd248b0bdf6ee1d97462, type: 2}
@@ -206,23 +237,61 @@ MonoBehaviour:
   missileJammingOptions:
   - {fileID: 11400000, guid: e74d9be9c83681e45bb679468181a9ed, type: 2}
   - {fileID: 11400000, guid: f7e4bafcf12fb2c478ed4de2d5662836, type: 2}
-  dronePropulsion: {fileID: 11400000, guid: 5a091eb9a788ae546a90f444e22f7cbc, type: 2}
-  droneAirframe: {fileID: 11400000, guid: aeb833a2f90ded04e861d5c3754daf5a, type: 2}
-  droneWing: {fileID: 11400000, guid: 1935aa23c42cc1249a8843acc8db9b5c, type: 2}
-  droneHull: {fileID: 11400000, guid: 5bd7a225688e39a4c85880e9f26708d8, type: 2}
-  droneEngine: {fileID: 11400000, guid: 1eeea9fc4f7af6e439f27985985f376a, type: 2}
-  droneFuel: {fileID: 11400000, guid: 9ac87b65af5665242bff23208ea46111, type: 2}
-  droneWeaponBay: {fileID: 11400000, guid: f1c500850e5a00c41b80289fd30f19e3, type: 2}
   droneSensorBasic: {fileID: 11400000, guid: 7879fc42beca37d40a0120415e56746b, type: 2}
   droneSensorScout: {fileID: 11400000, guid: e77cc89c12f85e74499fd5c907c21e8c, type: 2}
+  dronePropulsionOptions:
+  - {fileID: 11400000, guid: 5a091eb9a788ae546a90f444e22f7cbc, type: 2}
+  - {fileID: 11400000, guid: 8ea07f8885ac59f45923a4397f12f948, type: 2}
+  - {fileID: 11400000, guid: adb8e3f1bdcdf0d4a81d40df6414967a, type: 2}
+  - {fileID: 11400000, guid: 0780e5f6dce872047846b612259460e0, type: 2}
+  droneAirframeOptions:
+  - {fileID: 11400000, guid: aeb833a2f90ded04e861d5c3754daf5a, type: 2}
+  - {fileID: 11400000, guid: 4793586cdc03175469ba8a7415f7b27f, type: 2}
+  - {fileID: 11400000, guid: 7eca133ca4a697848893bb74992498e4, type: 2}
+  - {fileID: 11400000, guid: 4eb3ff7f2854ccb448e6bfc334b07461, type: 2}
+  - {fileID: 11400000, guid: d1a43ecdb83dd0840824b8e38325e5c2, type: 2}
+  droneWingOptions:
+  - {fileID: 11400000, guid: 1935aa23c42cc1249a8843acc8db9b5c, type: 2}
+  - {fileID: 11400000, guid: d473dbb5fed905c49bfcd79a102f77b3, type: 2}
+  - {fileID: 11400000, guid: 5b73bb365ac2f364c84576152879b6aa, type: 2}
+  - {fileID: 11400000, guid: d9f5030cedb92154aaa2760d9b303223, type: 2}
+  - {fileID: 11400000, guid: f9404ab7a9e345c4b9f81eeff8541381, type: 2}
+  - {fileID: 11400000, guid: e77537104e4bc5c4ab73fe89e0de1702, type: 2}
+  - {fileID: 11400000, guid: b9c5aefa7e4cc0b48af38e8049a62874, type: 2}
+  - {fileID: 11400000, guid: 324d76ecc9d6bbb43b613dfadd56a2de, type: 2}
+  - {fileID: 11400000, guid: 7dcf30c00f4842745b563d503d81458b, type: 2}
+  - {fileID: 11400000, guid: 37b3e520a1a233b4a912142f13612a78, type: 2}
+  - {fileID: 11400000, guid: 771d0e91f173c184abbf78f0fd53ee9b, type: 2}
+  - {fileID: 11400000, guid: d0ca37e872206cb4abb7a4f69d3c8208, type: 2}
+  - {fileID: 11400000, guid: 201c8496aa725724e8d7feed00a22f7b, type: 2}
+  droneHullOptions:
+  - {fileID: 11400000, guid: 5bd7a225688e39a4c85880e9f26708d8, type: 2}
+  - {fileID: 11400000, guid: d343a55da74cb0e4d836834909d77255, type: 2}
+  - {fileID: 11400000, guid: 5c740bd8b4b671f47bbc962ba3d693b3, type: 2}
+  - {fileID: 11400000, guid: 005b080b6a328d44ab8a35c1d381170d, type: 2}
+  - {fileID: 11400000, guid: 7f28812c2798d1541aa916fdd2a714fb, type: 2}
+  droneEngineOptions:
+  - {fileID: 11400000, guid: 1eeea9fc4f7af6e439f27985985f376a, type: 2}
+  - {fileID: 11400000, guid: 1a9a28949e4697942b6200da3ea56d25, type: 2}
+  - {fileID: 11400000, guid: 38d2d06aa1664734984c5a85e27f52ec, type: 2}
+  - {fileID: 11400000, guid: c5d5270f611833f4caf7255841383619, type: 2}
+  droneFuelOptions:
+  - {fileID: 11400000, guid: 9ac87b65af5665242bff23208ea46111, type: 2}
+  - {fileID: 11400000, guid: 4e0210ed1b8b4dd448806aa9db8a6c2c, type: 2}
+  - {fileID: 11400000, guid: 13a8c6aef6fb7b84a9177121568a0dfb, type: 2}
+  - {fileID: 11400000, guid: d0cf5ebbfcfd58544a811ba2a717f08e, type: 2}
+  droneWeaponBayOptions:
+  - {fileID: 11400000, guid: f1c500850e5a00c41b80289fd30f19e3, type: 2}
+  - {fileID: 11400000, guid: 49e777a843d84e3478fa0ede04a5e105, type: 2}
+  - {fileID: 11400000, guid: 3605a7a8ea00608409aba32cc5afddc9, type: 2}
   missileFuelFill: 1
---- !u!114 &561728287
+--- !u!114 &1734300575
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 561728285}
+  m_GameObject: {fileID: 1734300573}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
@@ -235,13 +304,13 @@ MonoBehaviour:
   m_WorldSpaceSizeMode: 1
   m_WorldSpaceWidth: 1920
   m_WorldSpaceHeight: 1080
---- !u!4 &561728288
+--- !u!4 &1734300576
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 561728285}
+  m_GameObject: {fileID: 1734300573}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -250,7 +319,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &628048175
+--- !u!1 &1879486727
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -258,8 +327,8 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 628048177}
-  - component: {fileID: 628048176}
+  - component: {fileID: 1879486729}
+  - component: {fileID: 1879486728}
   m_Layer: 0
   m_Name: GameBootstrap
   m_TagString: Untagged
@@ -267,25 +336,25 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &628048176
+--- !u!114 &1879486728
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 628048175}
+  m_GameObject: {fileID: 1879486727}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1bfc31147f123c6488ebf0a2e41a66d3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
---- !u!4 &628048177
+--- !u!4 &1879486729
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 628048175}
+  m_GameObject: {fileID: 1879486727}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -298,5 +367,5 @@ Transform:
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
-  - {fileID: 628048177}
-  - {fileID: 561728288}
+  - {fileID: 1879486729}
+  - {fileID: 1734300576}

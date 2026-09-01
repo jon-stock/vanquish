@@ -3,6 +3,7 @@ using UnityEngine;
 using Vanquish.Data;
 using Vanquish.Data.Drones;
 using Vanquish.Data.Shared;
+using Vanquish.Data.TechTree;
 using Vanquish.Simulation.Flight;
 
 namespace Vanquish.EditorTools
@@ -150,6 +151,73 @@ namespace Vanquish.EditorTools
 
             if (!allPass)
                 Debug.LogError("[Phase2BValidation] Drone breadth asset validation FAILED.");
+        }
+
+        [MenuItem("Vanquish/Phase 2B/Validate Drone Breadth Tech Wiring (Headless)")]
+        public static void ValidateDroneBreadthTechWiring()
+        {
+            const string TechDir = "Assets/_Project/Data/TechTree";
+            string[] nodeIds =
+            {
+                "TN_2B_drone_airframe_smallhexa", "TN_2B_drone_airframe_fixedwing",
+                "TN_2B_drone_airframe_flyingwingstealth", "TN_2B_drone_airframe_ccascale",
+                "TN_2B_drone_propeller_plastic_small", "TN_2B_drone_propeller_plastic_medium",
+                "TN_2B_drone_propeller_plastic_large", "TN_2B_drone_propeller_carbonfiber_small",
+                "TN_2B_drone_propeller_carbonfiber_medium", "TN_2B_drone_propeller_carbonfiber_large",
+                "TN_2B_drone_propeller_metal_small", "TN_2B_drone_propeller_metal_medium",
+                "TN_2B_drone_propeller_metal_large",
+                "TN_2B_drone_wing_fixedwing", "TN_2B_drone_wing_deltawing", "TN_2B_drone_wing_variablesweepwing",
+                "TN_2B_drone_hull_aluminumalloy", "TN_2B_drone_hull_carbonfiber",
+                "TN_2B_drone_hull_radarabsorbentmaterial", "TN_2B_drone_hull_titaniumalloy",
+                "TN_2B_drone_propulsion_ice_basic", "TN_2B_drone_engine_ice_basic",
+                "TN_2B_fuel_petrol_basic", "TN_2B_fuel_diesel_basic",
+                "TN_2B_drone_propulsion_jet_subsonic", "TN_2B_drone_engine_jet_subsonic", "TN_2B_fuel_jetfuel_basic",
+                "TN_2B_drone_propulsion_jet_supersonic", "TN_2B_drone_engine_jet_supersonic",
+                "TN_2B_drone_weaponbay_large", "TN_2B_drone_weaponbay_internalmedium",
+            };
+
+            bool allPass = true;
+            int checkedCount = 0;
+
+            foreach (var id in nodeIds)
+            {
+                var node = AssetDatabase.LoadAssetAtPath<TechNode>($"{TechDir}/{id}.asset");
+                if (node == null)
+                {
+                    Debug.LogError($"[Phase2BValidation] FAIL: missing tech node {id}. Run " +
+                        "Vanquish/Phase 2B/Seed Drone Breadth Tech Nodes (after the six variant seeders).");
+                    allPass = false;
+                    continue;
+                }
+
+                checkedCount++;
+
+                if (node.unlocks == null || node.unlocks.Length != 1 || node.unlocks[0] == null)
+                {
+                    Debug.LogError($"[Phase2BValidation] FAIL: {id} does not unlock exactly one non-null part.");
+                    allPass = false;
+                }
+
+                if (node.prerequisites == null || node.prerequisites.Length == 0)
+                {
+                    Debug.LogError($"[Phase2BValidation] FAIL: {id} has no prerequisites — should never be free.");
+                    allPass = false;
+                }
+            }
+
+            var supersonicNode = AssetDatabase.LoadAssetAtPath<TechNode>($"{TechDir}/TN_2B_drone_propulsion_jet_supersonic.asset");
+            var subsonicNode = AssetDatabase.LoadAssetAtPath<TechNode>($"{TechDir}/TN_2B_drone_propulsion_jet_subsonic.asset");
+            bool chainOk = supersonicNode != null && subsonicNode != null
+                && supersonicNode.prerequisites != null && supersonicNode.prerequisites.Length == 1
+                && supersonicNode.prerequisites[0] == subsonicNode;
+            Debug.Log($"[Phase2BValidation] Propulsion progression chain (Supersonic Jet requires Subsonic Jet): {(chainOk ? "PASS" : "FAIL")}");
+            allPass &= chainOk;
+
+            Debug.Log($"[Phase2BValidation] Checked {checkedCount}/{nodeIds.Length} expected Phase 2B drone tech nodes. " +
+                (allPass ? "ALL PASS" : "ONE OR MORE FAILURES ABOVE"));
+
+            if (!allPass)
+                Debug.LogError("[Phase2BValidation] Drone breadth tech wiring validation FAILED.");
         }
 
         [MenuItem("Vanquish/Phase 2B/Validate Altitude & Landing Math (Headless)")]

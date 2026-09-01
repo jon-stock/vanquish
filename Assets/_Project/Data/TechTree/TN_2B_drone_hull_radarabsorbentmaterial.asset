@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5838be6bb0ec882449e47b85b92859ee, type: 3}
+  m_Name: TN_2B_drone_hull_radarabsorbentmaterial
+  m_EditorClassIdentifier: 
+  id: TN_2B_drone_hull_radarabsorbentmaterial
+  displayName: Radar-Absorbent Material Hull
+  description: 
+  tier: 3
+  researchCost: 220
+  prerequisites:
+  - {fileID: 11400000, guid: f6b703e0538b6d14bad2cbd7fbaa6247, type: 2}
+  unlocks:
+  - {fileID: 11400000, guid: 005b080b6a328d44ab8a35c1d381170d, type: 2}
+  graphPosition: {x: 0, y: 0}

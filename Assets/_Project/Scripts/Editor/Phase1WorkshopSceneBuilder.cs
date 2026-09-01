@@ -82,6 +82,38 @@ namespace Vanquish.EditorTools
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2A_missile_countermeasure_rcsshaping.asset"),
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2A_missile_jamming_ecmpod.asset"),
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2A_missile_jamming_eccmsuite.asset"),
+                // Phase 2B drone breadth — seeded by Phase2BDroneBreadthSeeder.SeedTechTreeNodes().
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_airframe_smallhexa.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_airframe_fixedwing.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_airframe_flyingwingstealth.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_airframe_ccascale.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propeller_plastic_small.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propeller_plastic_medium.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propeller_plastic_large.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propeller_carbonfiber_small.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propeller_carbonfiber_medium.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propeller_carbonfiber_large.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propeller_metal_small.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propeller_metal_medium.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propeller_metal_large.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_wing_fixedwing.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_wing_deltawing.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_wing_variablesweepwing.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_hull_aluminumalloy.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_hull_carbonfiber.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_hull_radarabsorbentmaterial.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_hull_titaniumalloy.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propulsion_ice_basic.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_engine_ice_basic.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_fuel_petrol_basic.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_fuel_diesel_basic.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propulsion_jet_subsonic.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_engine_jet_subsonic.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_fuel_jetfuel_basic.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propulsion_jet_supersonic.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_engine_jet_supersonic.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_weaponbay_large.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_weaponbay_internalmedium.asset"),
             };
 
             workshop.missileAirframe = Load<MissileAirframeDefinition>("Assets/_Project/Data/Missiles/Airframe_Basic.asset");
@@ -128,15 +160,74 @@ namespace Vanquish.EditorTools
                 Load<JammingDefinition>("Assets/_Project/Data/Missiles/Jamming_EccmSuite.asset"),
             };
 
-            workshop.dronePropulsion = Load<PropulsionDefinition>("Assets/_Project/Data/Drones/Propulsion_Electric_Basic.asset");
-            workshop.droneAirframe = Load<DroneAirframeDefinition>("Assets/_Project/Data/Drones/Airframe_SmallQuad.asset");
-            workshop.droneWing = Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Propeller_Basic.asset");
-            workshop.droneHull = Load<HullMaterialDefinition>("Assets/_Project/Data/Drones/Hull_CompositePlastic.asset");
-            workshop.droneEngine = Load<DroneEngineDefinition>("Assets/_Project/Data/Drones/Engine_Electric_Basic.asset");
-            workshop.droneFuel = Load<FuelDefinition>("Assets/_Project/Data/Shared/Fuel_Battery_Basic.asset");
-            workshop.droneWeaponBay = Load<WeaponBayDefinition>("Assets/_Project/Data/Drones/WeaponBay_Small.asset");
             workshop.droneSensorBasic = Load<SensorSuiteDefinition>("Assets/_Project/Data/Drones/Sensor_Basic.asset");
             workshop.droneSensorScout = Load<SensorSuiteDefinition>("Assets/_Project/Data/Drones/Sensor_Scout.asset");
+
+            workshop.dronePropulsionOptions = new[]
+            {
+                Load<PropulsionDefinition>("Assets/_Project/Data/Drones/Propulsion_Electric_Basic.asset"),
+                Load<PropulsionDefinition>("Assets/_Project/Data/Drones/Propulsion_ICE_Basic.asset"),
+                Load<PropulsionDefinition>("Assets/_Project/Data/Drones/Propulsion_Jet_Subsonic.asset"),
+                Load<PropulsionDefinition>("Assets/_Project/Data/Drones/Propulsion_Jet_Supersonic.asset"),
+            };
+
+            workshop.droneAirframeOptions = new[]
+            {
+                Load<DroneAirframeDefinition>("Assets/_Project/Data/Drones/Airframe_SmallQuad.asset"),
+                Load<DroneAirframeDefinition>("Assets/_Project/Data/Drones/Airframe_SmallHexa.asset"),
+                Load<DroneAirframeDefinition>("Assets/_Project/Data/Drones/Airframe_FixedWing.asset"),
+                Load<DroneAirframeDefinition>("Assets/_Project/Data/Drones/Airframe_FlyingWingStealth.asset"),
+                Load<DroneAirframeDefinition>("Assets/_Project/Data/Drones/Airframe_CcaScale.asset"),
+            };
+
+            workshop.droneWingOptions = new[]
+            {
+                Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Propeller_Basic.asset"),
+                Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Propeller_Plastic_Small.asset"),
+                Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Propeller_Plastic_Medium.asset"),
+                Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Propeller_Plastic_Large.asset"),
+                Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Propeller_CarbonFiber_Small.asset"),
+                Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Propeller_CarbonFiber_Medium.asset"),
+                Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Propeller_CarbonFiber_Large.asset"),
+                Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Propeller_Metal_Small.asset"),
+                Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Propeller_Metal_Medium.asset"),
+                Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Propeller_Metal_Large.asset"),
+                Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Wing_FixedWing.asset"),
+                Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Wing_DeltaWing.asset"),
+                Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Wing_VariableSweepWing.asset"),
+            };
+
+            workshop.droneHullOptions = new[]
+            {
+                Load<HullMaterialDefinition>("Assets/_Project/Data/Drones/Hull_CompositePlastic.asset"),
+                Load<HullMaterialDefinition>("Assets/_Project/Data/Drones/Hull_AluminumAlloy.asset"),
+                Load<HullMaterialDefinition>("Assets/_Project/Data/Drones/Hull_CarbonFiber.asset"),
+                Load<HullMaterialDefinition>("Assets/_Project/Data/Drones/Hull_RadarAbsorbentMaterial.asset"),
+                Load<HullMaterialDefinition>("Assets/_Project/Data/Drones/Hull_TitaniumAlloy.asset"),
+            };
+
+            workshop.droneEngineOptions = new[]
+            {
+                Load<DroneEngineDefinition>("Assets/_Project/Data/Drones/Engine_Electric_Basic.asset"),
+                Load<DroneEngineDefinition>("Assets/_Project/Data/Drones/Engine_ICE_Basic.asset"),
+                Load<DroneEngineDefinition>("Assets/_Project/Data/Drones/Engine_Jet_Subsonic.asset"),
+                Load<DroneEngineDefinition>("Assets/_Project/Data/Drones/Engine_Jet_Supersonic.asset"),
+            };
+
+            workshop.droneFuelOptions = new[]
+            {
+                Load<FuelDefinition>("Assets/_Project/Data/Shared/Fuel_Battery_Basic.asset"),
+                Load<FuelDefinition>("Assets/_Project/Data/Shared/Fuel_Petrol_Basic.asset"),
+                Load<FuelDefinition>("Assets/_Project/Data/Shared/Fuel_Diesel_Basic.asset"),
+                Load<FuelDefinition>("Assets/_Project/Data/Shared/Fuel_JetFuel_Basic.asset"),
+            };
+
+            workshop.droneWeaponBayOptions = new[]
+            {
+                Load<WeaponBayDefinition>("Assets/_Project/Data/Drones/WeaponBay_Small.asset"),
+                Load<WeaponBayDefinition>("Assets/_Project/Data/Drones/WeaponBay_Large.asset"),
+                Load<WeaponBayDefinition>("Assets/_Project/Data/Drones/WeaponBay_InternalMedium.asset"),
+            };
 
             System.IO.Directory.CreateDirectory("Assets/_Project/Scenes");
             EditorSceneManager.SaveScene(scene, ScenePath);

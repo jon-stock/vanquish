@@ -129,6 +129,17 @@
     margin: 2px;
 }
 
+.part-picker-section-header {
+    font-size: 15px;
+    -unity-font-style: bold;
+    color: rgb(180, 210, 255);
+    margin-top: 10px;
+    margin-bottom: 2px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(180, 210, 255, 0.4);
+    padding-bottom: 2px;
+}
+
 .slider-row {
     margin-bottom: 8px;
 }

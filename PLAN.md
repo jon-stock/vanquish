@@ -374,10 +374,25 @@ terrain/slopes exist; the "hold `RelativeAGL` over *sloped* terrain" half of the
 criteria below should be re-verified against an actual sloped arena once Phase 2E lands
 a heightmap terrain, since no sloped ground exists in the project yet to test against.
 Unlike 2A, this sub-milestone's own PLAN.md checklist did not require wiring the new
-part breadth into a Workshop multi-option picker (2A's picker infrastructure —
-`WorkshopController.BuildPartSlotRow<T>`/`ResolveSelection<T>` — already generalizes to
-any `PartDefinition`, so that remains a cheap, low-risk follow-up whenever it's wanted,
-not deferred due to difficulty).
+part breadth into a Workshop multi-option picker — but since 2A's picker
+infrastructure (`WorkshopController.BuildPartSlotRow<T>`/`ResolveSelection<T>`) already
+generalized to any `PartDefinition`, this was done as a cheap follow-up rather than left
+sitting as inert data: `Phase2BDroneBreadthSeeder.SeedTechTreeNodes` wires all 31
+previously-unwired 2B drone parts behind their own `TN_2B_*` TechNodes (mirroring 2A's
+`SeedTechTreeNodes`, with the same category-internal progression-chaining approach —
+e.g. `Engine_Jet_Supersonic` requires `Engine_Jet_Subsonic`; RAM hull requires Carbon
+Fiber requires Aluminum Alloy), and `WorkshopController` gained a "Drone Loadout"
+picker section (Propulsion/Airframe/Wing-or-Rotor/Hull Material/Engine/Fuel/Weapon Bay)
+right below the existing "Missile Loadout" section in the same scroll, using the exact
+same `BuildPartSlotRow`/`ResolveSelection` machinery 2A already built — no picker-UI
+code needed to change, only new option arrays on `WorkshopController` and their
+`Phase1WorkshopSceneBuilder` wiring. Sensor suites (basic/scout) stayed single-option
+fields since they're fixed by drone role, not a player choice. Verified headlessly via
+new `Phase2BValidation.ValidateDroneBreadthTechWiring` (31/31 nodes correctly wired,
+progression chain check passed), a `Phase1WorkshopSceneBuilder.BuildScene` rebuild with
+no missing-asset errors, a `Phase1WorkshopSmokeTest` Play-mode run with no exceptions,
+and a full 60-second `Phase1BatchRunner` combat regression re-run confirming the rest
+of the loop still behaves correctly.
 
 **Exit criteria:** Every `PartCategory.Drone*` enum value has at least 2–3 real assets
 (✅ — Propulsion: 4, Airframe: 5, WingOrPropeller: 13, HullMaterial: 5, Engine: 4,
