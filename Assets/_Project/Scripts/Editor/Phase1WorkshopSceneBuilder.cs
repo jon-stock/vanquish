@@ -7,6 +7,7 @@ using Vanquish.Core;
 using Vanquish.Data.Drones;
 using Vanquish.Data.Missiles;
 using Vanquish.Data.Shared;
+using Vanquish.Data.Support;
 using Vanquish.Data.TechTree;
 using Vanquish.Workshop;
 
@@ -128,6 +129,8 @@ namespace Vanquish.EditorTools
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_engine_jet_supersonic.asset"),
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_weaponbay_large.asset"),
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_weaponbay_internalmedium.asset"),
+                // Phase 2C guidance depth — seeded by Phase2CGuidanceDepthSeeder.
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2C_support_datalink_midcourserelay.asset"),
             };
 
             workshop.missileAirframe = Load<MissileAirframeDefinition>("Assets/_Project/Data/Missiles/Airframe_Basic.asset");
@@ -172,6 +175,11 @@ namespace Vanquish.EditorTools
             {
                 Load<JammingDefinition>("Assets/_Project/Data/Missiles/Jamming_EcmPod.asset"),
                 Load<JammingDefinition>("Assets/_Project/Data/Missiles/Jamming_EccmSuite.asset"),
+            };
+
+            workshop.missileDatalinkOptions = new[]
+            {
+                Load<DatalinkNetworkDefinition>("Assets/_Project/Data/Support/Datalink_MidCourseRelay.asset"),
             };
 
             workshop.droneSensorBasic = Load<SensorSuiteDefinition>("Assets/_Project/Data/Drones/Sensor_Basic.asset");
@@ -241,6 +249,15 @@ namespace Vanquish.EditorTools
                 Load<WeaponBayDefinition>("Assets/_Project/Data/Drones/WeaponBay_Small.asset"),
                 Load<WeaponBayDefinition>("Assets/_Project/Data/Drones/WeaponBay_Large.asset"),
                 Load<WeaponBayDefinition>("Assets/_Project/Data/Drones/WeaponBay_InternalMedium.asset"),
+            };
+
+            // Phase 2C: reuses the exact same CountermeasureDefinition assets already
+            // seeded for the missile slot above — see Phase2CGuidanceDepthSeeder's doc
+            // comment for why this isn't a duplicate set of drone-specific assets.
+            workshop.droneCountermeasureOptions = new[]
+            {
+                Load<CountermeasureDefinition>("Assets/_Project/Data/Missiles/Countermeasure_FlareChaffDispenser.asset"),
+                Load<CountermeasureDefinition>("Assets/_Project/Data/Missiles/Countermeasure_RcsShaping.asset"),
             };
 
             System.IO.Directory.CreateDirectory("Assets/_Project/Scenes");

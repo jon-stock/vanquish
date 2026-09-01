@@ -133,7 +133,8 @@ namespace Vanquish.Data
             stats.massKg = loadout.propulsion.massKg + loadout.airframe.massKg + loadout.airframe.structuralMassKg
                            + loadout.wingOrPropeller.massKg + loadout.hullMaterial.massKg + loadout.engine.massKg
                            + loadout.fuel.massKg + stats.fuelMassKg + loadout.weaponBay.massKg
-                           + loadout.sensorSuite.massKg + missileMass;
+                           + loadout.sensorSuite.massKg + missileMass
+                           + (loadout.countermeasure != null ? loadout.countermeasure.massKg : 0f);
 
             stats.maxTakeOffMassKg = loadout.airframe.maxTakeOffMassKg;
             stats.isWithinMtow = stats.maxTakeOffMassKg <= 0f || stats.massKg <= stats.maxTakeOffMassKg;
@@ -153,8 +154,13 @@ namespace Vanquish.Data
             // AI-controlled drones rocketing far off the arena.
             stats.maxGForce = 0.5f + (loadout.wingOrPropeller.turnRateDegreesPerSecond / 90f);
 
-            stats.radarCrossSection = loadout.airframe.baseRadarCrossSection * loadout.hullMaterial.radarCrossSectionMultiplier;
-            stats.infraredSignature = loadout.propulsion.infraredSignature + loadout.engine.infraredSignature;
+            // Phase 2C: fold in the optional decoy countermeasure's stealth multipliers
+            // alongside the hull material's, same pattern MissileRuntimeStats already
+            // uses for its own (separate) countermeasure slot.
+            float droneRcsMultiplier = loadout.countermeasure != null ? loadout.countermeasure.radarCrossSectionMultiplier : 1f;
+            float droneIrMultiplier = loadout.countermeasure != null ? loadout.countermeasure.infraredSignatureMultiplier : 1f;
+            stats.radarCrossSection = loadout.airframe.baseRadarCrossSection * loadout.hullMaterial.radarCrossSectionMultiplier * droneRcsMultiplier;
+            stats.infraredSignature = (loadout.propulsion.infraredSignature + loadout.engine.infraredSignature) * droneIrMultiplier;
 
             // Phase 1 simplification: health derived from hull armor rating + a flat base.
             stats.maxHealth = 50f + loadout.hullMaterial.armorRating * 10f;

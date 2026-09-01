@@ -1,3 +1,6 @@
+# Local Kilo CLI/tool config (not project code)
+.kilo/
+
 # Unity generated
 [Ll]ibrary/
 [Tt]emp/

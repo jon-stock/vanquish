@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using Vanquish.Data.Shared;
+using Vanquish.Data.Support;
 
 namespace Vanquish.Data.Missiles
 {
@@ -22,6 +23,12 @@ namespace Vanquish.Data.Missiles
         public FuelDefinition fuel;
         public CountermeasureDefinition countermeasure; // optional, may be null
         public JammingDefinition jamming; // optional, may be null
+
+        [Tooltip("Optional datalink network part (Phase 2C) — when its supportsMidCourseUpdates is " +
+            "true, GuidanceLawFactory wraps the missile's normal seeker-based guidance in " +
+            "DatalinkMidCourseGuidance so it flies toward periodically-relayed target data before its " +
+            "own seeker is in range, instead of needing a lock for its entire flight.")]
+        public DatalinkNetworkDefinition datalink; // optional, may be null
 
         [Tooltip("Continuous fuel tank fill level (0 = empty, 1 = full capacity) — the " +
             "'Continuous Sliders' concept from the design doc. Trades range/burn time " +

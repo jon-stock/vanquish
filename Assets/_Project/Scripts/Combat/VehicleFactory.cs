@@ -42,6 +42,10 @@ namespace Vanquish.Combat
             {
                 var guidance = missile.AddComponent<GuidanceController>();
                 guidance.SetTarget(target);
+                // Phase 2C: pick the guidance law from the missile's seeker type (and
+                // datalink, if any) instead of always defaulting to pursuit — see
+                // GuidanceLawFactory for the mapping.
+                guidance.SetGuidanceLaw(GuidanceLawFactory.Create(loadout));
             }
 
             var signature = missile.AddComponent<DetectableSignature>();
@@ -57,6 +61,25 @@ namespace Vanquish.Combat
             var sensor = missile.AddComponent<DetectionSensor>();
             sensor.baseRangeMeters = stats.seekerRangeMeters;
             sensor.ownerTeam = team;
+            // Phase 2C: seeker jam resistance + any ECCM (JammingDefinition.counterJammingStrength)
+            // already folded into stats.jamResistance — thread it into the sensor so
+            // enemy jamming actually has something to be resisted against.
+            sensor.jamResistance = stats.jamResistance;
+            sensor.reacquisitionGraceSeconds = loadout.seeker.reacquisitionTimeSeconds > 0f
+                ? loadout.seeker.reacquisitionTimeSeconds
+                : sensor.reacquisitionGraceSeconds;
+
+            // Phase 2C: a missile carrying a jamming module actively degrades nearby
+            // enemy sensors' detection chance while it flies — see JammerSource's doc
+            // comment for why this lives on the missile's own loadout slot rather than
+            // the drone's.
+            if (loadout.jamming != null)
+            {
+                var jammer = missile.AddComponent<JammerSource>();
+                jammer.jammingStrength = loadout.jamming.jammingStrength;
+                jammer.jammingRangeMeters = loadout.jamming.jammingRangeMeters;
+                jammer.team = team;
+            }
 
             if (loadout.payload.requiresProximityFuse && stats.blastRadiusMeters > 0f)
             {
@@ -127,6 +150,16 @@ namespace Vanquish.Combat
             health.SetMaxHealth(stats.maxHealth);
 
             drone.AddComponent<CrashDamage>();
+
+            // Phase 2C: an optional decoy/flare-chaff countermeasure gives this drone a
+            // chance to break an inbound missile's lock — see CountermeasureController's
+            // doc comment for why this lives on the drone's loadout, not the missile's.
+            if (loadout.countermeasure != null)
+            {
+                var countermeasures = drone.AddComponent<CountermeasureController>();
+                countermeasures.decoyChargesRemaining = loadout.countermeasure.decoyCharges;
+                countermeasures.decoySuccessChance = loadout.countermeasure.decoySuccessChance;
+            }
 
             if (loadout.missileLoadout != null && loadout.missileLoadout.IsComplete)
             {

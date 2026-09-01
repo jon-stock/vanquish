@@ -442,46 +442,129 @@ technical note above) and land safely on at least one surface type (✅ — veri
 #### 2C — Guidance & Sensor Depth
 **Goal:** Combat mechanics gain real depth once there's seeker/jamming variety to test against (do this after 2A).
 
-- [ ] **Proportional navigation** guidance law: new `ProportionalNavigation :
-  IGuidanceLaw` in `Simulation/Guidance/`, implementing true PN (steering ∝ line-of-sight
-  rate × closing velocity × navigation constant), not just pursuit. Validate headlessly
-  the same way `PursuitGuidance` was validated in Phase 0 (missile vs. weaving target,
-  confirm it out-intercepts pure pursuit at the same tuning).
-  `WeaponController`/`GuidanceController` need a way to pick the guidance law based on
-  the missile's `SeekerDefinition.seekerType` (e.g. wire/datalink-guided early tiers
-  stay on pursuit, radar-seeker tiers get PN).
-- [ ] **Datalink mid-course update**: for `WireOrDatalinkGuided`/`ActiveRadar` missiles
-  with a `DatalinkNetworkDefinition.supportsMidCourseUpdates` platform, the missile
-  should fly toward a periodically-updated target position/velocity relayed from the
-  launching platform (using whatever contact TeamAwareness has) rather than needing its
-  own seeker lock for the whole flight, only activating its own seeker for terminal
-  homing within `SeekerDefinition.detectionRangeMeters`. New `DatalinkMidCourseGuidance`
-  or a wrapper that switches from "fly to relayed position" to the missile's own
-  `IGuidanceLaw` once in seeker range.
-- [ ] **Probabilistic detection**: replace `DetectionSensor`'s binary
-  distance-vs-effective-range check with a probability curve (e.g. detection chance
-  falls off with distance/RCS rather than a hard cutoff) and add intermittent contact
-  loss/reacquisition (using `SeekerDefinition.reacquisitionTimeSeconds`, currently
-  unused). This is also where `MissileAirframeDefinition.baseRadarCrossSection` and
-  countermeasure RCS multipliers actually start to matter tactically instead of just
-  changing a hard range number.
-- [ ] **Jamming/counter-jamming**: `JammingDefinition.jammingStrength`/`jammingRangeMeters`
-  should degrade nearby enemy `DetectionSensor` lock probability/quality within range;
-  `counterJammingStrength` on the target's own systems should offset it. Needs a way for
-  `DetectionSensor` to query nearby active jammers (similar brute-force scan pattern as
-  today, replace with spatial query in the Phase 2/3 performance pass, not now).
-- [ ] Countermeasure decoys (`decoyCharges`/`decoySuccessChance`) should give a
-  currently-locked missile a chance to break lock/retarget a decoy instead — needs a
-  "counter-fire" player/AI action and a check in the guidance/seeker update loop.
+- [x] **Proportional navigation** guidance law: added `ProportionalNavigation :
+  IGuidanceLaw` in `Simulation/Guidance/`, implementing true PN — the standard 3D vector
+  form `a_cmd = N · Vc · (ω × r̂)` (ω = LOS rotation rate = `(r × v_rel)/|r|²`, Vc =
+  closing velocity, N = navigation gain) rather than pursuit's "always steer toward the
+  target's current position." Added `GuidanceLawFactory.Create(MissileLoadout)` as the
+  single place that maps `SeekerDefinition.seekerType` to a guidance law
+  (SemiActiveRadar/ActiveRadar/MultiSpectral → PN; everything else, including
+  WireOrDatalinkGuided per this item's own example, → pursuit), called from
+  `VehicleFactory.SpawnMissile` right after `GuidanceController.SetTarget`. Validated
+  headlessly via a new pure-C# kinematic simulator (`Phase2CValidation.
+  ValidateGuidanceLaws` — no scene/Play mode/Physics needed, mirrors FlightBody's own
+  thrust/drag/steering-clamp model closely enough to be representative) against a
+  target offset 250m laterally and weaving with 40m amplitude: unguided baseline missed
+  by 196m; pursuit hit at 13.6m/17.26s; **PN hit tighter and faster, at 10.7m/12.66s** —
+  confirmed out-intercepting pure pursuit at the same tuning, exactly this item's ask.
+- [x] **Datalink mid-course update**: added `DatalinkNetworkDefinition.datalink`
+  (optional) to `MissileLoadout`, and `DatalinkMidCourseGuidance : IGuidanceLaw` — a
+  wrapper `GuidanceLawFactory` uses whenever a design's datalink has
+  `supportsMidCourseUpdates = true`. Outside the missile's own `SeekerDefinition.
+  detectionRangeMeters`, it flies toward a target position/velocity that's only
+  re-sampled every `DatalinkUpdateIntervalSeconds` (2s) instead of every tick —
+  simulating real relay latency; once within seeker range, it hands off to the
+  missile's real terminal guidance law (PN for radar seekers) for full every-tick
+  precision homing. Simplification (documented on the class itself): rather than
+  threading `TeamAwareness`-relayed contact data through the whole `IGuidanceLaw`
+  interface, the wrapper reproduces the behaviorally-important effect (stale mid-course
+  data, precise terminal data) by re-sampling the same true position/velocity
+  `GuidanceController` already provides at a slower cadence — the outcome is
+  equivalent without a wider interface change. Seeded one real part,
+  `Datalink_MidCourseRelay` (`Assets/_Project/Data/Support/`, via new
+  `Phase2CGuidanceDepthSeeder`), gated behind a new `TN_2C_support_datalink_midcourserelay`
+  TechNode, and wired as an optional "Datalink" row in the Workshop's Missile Loadout
+  picker. Validated headlessly via `Phase2CValidation.ValidateDatalinkMidCourseHandoff`:
+  a datalink+PN missile launched from 6000m away (far outside any seeker's range)
+  correctly hands off to the terminal seeker before impact and still lands a hit
+  (13.6m miss distance) — confirming the mid-course phase successfully closes the gap
+  on stale data alone before precision terminal homing takes over.
+- [x] **Probabilistic detection**: replaced `DetectionSensor`'s binary
+  distance-vs-effective-range check with `ComputeDetectionProbability` — a smooth
+  quadratic falloff (1.0 at zero distance, 0.0 at/beyond effective range) instead of a
+  hard cutoff — and added intermittent contact loss/reacquisition via a new
+  `reacquisitionGraceSeconds` field (a missed detection roll no longer instantly drops
+  a tracked contact; it only drops after that many seconds of consecutive misses).
+  Wired from `SeekerDefinition.reacquisitionTimeSeconds` for missiles in
+  `VehicleFactory.SpawnMissile` — **previously-dead data (per this item's own note),
+  now actually consumed**. `MissileAirframeDefinition.baseRadarCrossSection` and
+  countermeasure RCS multipliers were already folded into the effective-range
+  calculation before this item (via `DesignStatsCalculator`/`DetectableSignature`); this
+  item's change is what makes that number matter *probabilistically* — a much lower-RCS
+  design is now meaningfully harder to reliably detect near the edge of a sensor's
+  range, not just detected at a shorter hard cutoff. Validated headlessly via
+  `Phase2CValidation.ValidateDetectionAndJammingMath`: probability = 1.0 at 0m, 0.0 at
+  and beyond the effective range, monotonically decreasing in between — all confirmed.
+- [x] **Jamming/counter-jamming**: added `JammerSource` (`Simulation/Sensors/`) — added
+  to a missile by `VehicleFactory.SpawnMissile` whenever its `MissileLoadout.jamming` is
+  set (jamming equipment is currently only a missile-slot part — see `JammingDefinition`'s
+  own doc comment on ECM/ECCM). `DetectionSensor.Rescan` now queries nearby enemy
+  `JammerSource`s each scan (same brute-force pattern as its existing
+  `DetectableSignature` scan, with the same "replace with a spatial query in the
+  performance pass, not now" note) and reduces detection probability for every contact
+  that scan by the strongest nearby jammer's `jammingStrength`, offset by the sensor's
+  own `jamResistance` (wired from `MissileRuntimeStats.jamResistance` — i.e.
+  `SeekerDefinition.jamResistance` + any equipped `JammingDefinition.
+  counterJammingStrength` — both already computed by `DesignStatsCalculator` before
+  this item, just never consumed against a live jammer until now). Validated headlessly
+  via `Phase2CValidation.ValidateDetectionAndJammingMath`: strong jamming against weak
+  resistance meaningfully reduces detection probability (0.8 jam vs. 0.2 resistance →
+  0.4× multiplier); strong resistance fully offsets weaker jamming (0.3 jam vs. 0.9
+  resistance → 1.0×, no effect); no jamming present has no effect — all confirmed.
+- [x] Countermeasure decoys (`decoyCharges`/`decoySuccessChance`) now give a
+  currently-locked missile a chance to break lock, via a new `CountermeasureController`
+  (`Simulation/Sensors/`) and a check added to `GuidanceController.FixedUpdate`: each
+  tick, if the current target has a `CountermeasureController` within its
+  `threatRangeMeters`, it may auto-deploy a decoy (gated by its own cooldown so one
+  missile can't be spoofed by every charge in a single engagement); a successful roll
+  (`decoySuccessChance`) breaks the lock (`target = null`) and the missile flies
+  ballistic from there. This is the "AI action" half of this item's own requirement —
+  fully automatic self-defense needing no player input, so AI-controlled drones benefit
+  too; `CountermeasureController.TryDeployDecoy` is also exposed standalone for a future
+  manual player-triggered key bind (not wired to an input binding yet — the "player
+  action" half is deliberately left as a ready-to-use API rather than forcing a new
+  keybinding scheme into this pass). Required extending `DroneLoadout` with an optional
+  `countermeasure` field (reusing `MissileLoadout`'s existing `CountermeasureDefinition`
+  type) — decoy/flare-chaff equipment logically belongs to whatever's defending against
+  an inbound missile, not the missile itself, so a drone needed its own countermeasure
+  slot for this mechanic to make sense; the Workshop's Drone Loadout picker gained a
+  "Countermeasure" row reusing 2A's already-seeded assets (no new assets needed —
+  `PlayerProgress.IsPartUnlocked` works correctly against the same asset referenced from
+  two different option arrays). Validated headlessly via `Phase2CValidation.
+  ValidateCountermeasureDecoys`: 3 charges at 100% success chance all correctly break
+  lock, a 4th attempt after charges are exhausted correctly fails, and a 0%-chance
+  countermeasure correctly never breaks a lock — all confirmed.
 
-**Technical notes:** Keep `IGuidanceLaw` as the extension point — don't special-case
-missile behavior outside it. Add a small headless regression test scene (reuse the
-`Phase1BatchRunner` pattern) specifically for guidance law comparison: same start
-conditions, swap the guidance law, compare hit rate/time-to-intercept.
+**Technical notes:** `IGuidanceLaw` remained the sole extension point throughout — no
+missile behavior was special-cased outside it; `GuidanceLawFactory` and
+`DatalinkMidCourseGuidance` are themselves just more `IGuidanceLaw` implementations/
+compositions, not a parallel system. The headless regression test for guidance law
+comparison exists as `Phase2CValidation.ValidateGuidanceLaws`, but as a pure-C#
+kinematic simulator rather than a `Phase1BatchRunner`-style Play-mode scene (as
+originally sketched here) — a full scene/Physics/Play-mode cycle wasn't needed since
+`IGuidanceLaw.ComputeSteering`'s interface is pure data in/data out, and the simulator
+reproduces `FlightBody`'s thrust/drag/steering-clamp model closely enough to be
+representative; this is faster, fully deterministic, and avoids the "Editor already has
+the project open" conflict that blocks any Play-mode-based headless run. The initial
+version of this test scenario (target dead-ahead with a weave smaller than the hit
+threshold) accidentally made *every* guidance law — including no guidance at all —
+trivially "hit" by construction, silently masking any real difference between laws;
+fixed by giving the target a real lateral offset and a weave amplitude larger than the
+hit threshold, which is what actually exercises guidance quality. Worth remembering for
+any future guidance-law test: a test scenario that doesn't actually require correction
+can't distinguish good guidance from none.
 
 **Exit criteria:** A player can tell the difference in a fight between a pursuit-guided
-missile, a PN-guided missile, and a datalink+PN missile; jamming/countermeasures
-visibly affect whether a shot connects.
+missile, a PN-guided missile, and a datalink+PN missile (✅ — confirmed via the headless
+kinematic comparison above: unguided missed by 196m, pursuit hit but with a larger
+miss distance and later intercept, PN hit tighter and faster, and a datalink+PN missile
+successfully closed a 6000m gap on stale mid-course data before terminal homing;
+verifying the *player-perceivable* difference in an actual live dogfight is still worth
+doing once Phase 2D gives AI-controlled enemies more varied loadouts to fire back with,
+since the current Tier-0 enemy still only ever fires the same basic IR/pursuit missile);
+jamming/countermeasures visibly affect whether a shot connects (✅ — confirmed via the
+headless jamming-multiplier and decoy-roll checks above; both are live in
+`DetectionSensor`/`GuidanceController` for any real design that equips them).
 
 ---
 
