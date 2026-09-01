@@ -43,6 +43,10 @@ namespace Vanquish.EditorTools
                 a.maxGForce = 25f;
                 a.baseRadarCrossSection = 0.05f;
                 a.maxTemperatureCelsius = 200f;
+                // Fully-loaded Tier 0 missile (airframe+engine+payload+seeker+full fuel)
+                // is 30kg — 40kg leaves headroom for a fuller fuel slider or a slightly
+                // heavier part swap without instantly tripping the MTOW check.
+                a.maxTakeOffMassKg = 40f;
             });
 
             var missileEngine = CreateOrReplace<MissileEngineDefinition>($"{MissilesDir}/Engine_SolidRocket_Basic.asset", e =>
@@ -130,6 +134,13 @@ namespace Vanquish.EditorTools
                 a.hardpointCount = 2;
                 a.internalBayCount = 0;
                 a.baseRadarCrossSection = 0.3f;
+                // Phase 2B fields. rotorCount=4 matches the existing procedural quadcopter
+                // visual. maxTakeOffMassKg=180 gives headroom over a fully-loaded Tier-0
+                // strike drone (~141kg: ~21kg of drone parts + 4x ~30kg Tier-0 missiles)
+                // without breaking the already-working Phase 1 loop — same "don't trip the
+                // already-working MTOW check" precedent as 2A's Airframe_Basic.
+                a.rotorCount = 4;
+                a.maxTakeOffMassKg = 180f;
             });
 
             var droneWing = CreateOrReplace<WingOrPropellerDefinition>($"{DronesDir}/Propeller_Basic.asset", w =>

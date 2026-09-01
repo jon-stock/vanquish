@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 64152b9311587314193e4e4490265fa7, type: 3}
+  m_Name: Airframe_CcaScale
+  m_EditorClassIdentifier: 
+  id: drone_airframe_ccascale
+  displayName: CCA-Scale Airframe
+  description: 
+  icon: {fileID: 0}
+  category: 8
+  tier: 4
+  researchCost: 400
+  buildCost: 280
+  massKg: 12
+  prerequisites: []
+  airframeClass: 3
+  dragCoefficient: 0.05
+  structuralMassKg: 40
+  hardpointCount: 6
+  internalBayCount: 3
+  baseRadarCrossSection: 0.15
+  rotorCount: 0
+  maxTakeOffMassKg: 800

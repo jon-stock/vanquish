@@ -28,3 +28,5 @@ MonoBehaviour:
   hardpointCount: 2
   internalBayCount: 0
   baseRadarCrossSection: 0.3
+  rotorCount: 4
+  maxTakeOffMassKg: 180

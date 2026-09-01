@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 16d63287ba9ea6a4cbe29fe2abdaf3f6, type: 3}
+  m_Name: Wing_DeltaWing
+  m_EditorClassIdentifier: 
+  id: drone_wing_deltawing
+  displayName: Delta Wing
+  description: 
+  icon: {fileID: 0}
+  category: 9
+  tier: 2
+  researchCost: 150
+  buildCost: 95
+  massKg: 3.5
+  prerequisites: []
+  liftSurfaceType: 2
+  liftCoefficient: 1.1
+  dragCoefficient: 0.035
+  turnRateDegreesPerSecond: 110
+  cruiseEfficiencyMultiplier: 1.1
+  rotorMaterial: 0
+  rotorSize: 0
+  structuralIntegrity: 1

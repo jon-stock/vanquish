@@ -46,6 +46,13 @@ namespace Vanquish.Data
         SemiActiveRadar,
         ActiveRadar,
         WireOrDatalinkGuided,
+
+        // Added in Phase 2A for full seeker spectrum breadth. Appended rather than
+        // inserted alphabetically to keep the existing values' serialized int ordinals
+        // stable on already-saved assets.
+        Laser,
+        ImagingInfrared,
+        MultiSpectral,
     }
 
     public enum PropulsionType
@@ -58,6 +65,11 @@ namespace Vanquish.Data
         SolidRocket,
         LiquidRocket,
         HybridRocket,
+
+        // Added in Phase 2B for drone propulsion spectrum breadth (Petrol/Diesel
+        // internal combustion engines). Appended rather than inserted to keep
+        // existing values' serialized int ordinals stable on already-saved assets.
+        InternalCombustion,
     }
 
     public enum FuelType
@@ -67,6 +79,11 @@ namespace Vanquish.Data
         SolidPropellant,
         LiquidPropellant,
         HybridPropellant,
+
+        // Added in Phase 2B for drone ICE propulsion (Petrol/Diesel). Appended, not
+        // inserted, for the same serialized-ordinal-stability reason as above.
+        Petrol,
+        Diesel,
     }
 
     public enum PayloadType

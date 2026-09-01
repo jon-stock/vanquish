@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 16d63287ba9ea6a4cbe29fe2abdaf3f6, type: 3}
+  m_Name: Propeller_Metal_Medium
+  m_EditorClassIdentifier: 
+  id: drone_propeller_metal_medium
+  displayName: Medium Metal Propeller Set
+  description: 
+  icon: {fileID: 0}
+  category: 9
+  tier: 0
+  researchCost: 55
+  buildCost: 34
+  massKg: 1.5
+  prerequisites: []
+  liftSurfaceType: 0
+  liftCoefficient: 1
+  dragCoefficient: 0.065
+  turnRateDegreesPerSecond: 180
+  cruiseEfficiencyMultiplier: 1
+  rotorMaterial: 2
+  rotorSize: 1
+  structuralIntegrity: 0.85

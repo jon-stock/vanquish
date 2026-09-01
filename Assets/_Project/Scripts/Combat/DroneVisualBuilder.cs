@@ -17,6 +17,45 @@ namespace Vanquish.Combat
     /// </summary>
     public static class DroneVisualBuilder
     {
+        /// <summary>
+        /// Cheap prototype silhouette for fixed-wing/jet-propulsion airframes (FixedWing,
+        /// FlyingWingStealth, CcaScale — anything with PropulsionDefinition.requiresForwardFlight
+        /// true), added in Phase 2B alongside the rotorCount-driven multirotor visual above so a
+        /// jet drone doesn't spawn looking like a quadcopter. Same "no imported models" convention:
+        /// a fuselage capsule plus a crossed wing/tail slab from primitives.
+        /// </summary>
+        public static Transform BuildFixedWingVisual(Transform parent, float wingSpan = 1.6f, float fuselageLength = 1.4f)
+        {
+            var root = new GameObject("Visual");
+            root.transform.SetParent(parent, worldPositionStays: false);
+            root.transform.localPosition = Vector3.zero;
+            root.transform.localRotation = Quaternion.identity;
+
+            GameObject fuselage = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            fuselage.name = "Fuselage";
+            DestroyCollider(fuselage);
+            fuselage.transform.SetParent(root.transform, worldPositionStays: false);
+            fuselage.transform.localPosition = Vector3.zero;
+            fuselage.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            fuselage.transform.localScale = new Vector3(0.25f, fuselageLength * 0.5f, 0.25f);
+
+            GameObject mainWing = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            mainWing.name = "MainWing";
+            DestroyCollider(mainWing);
+            mainWing.transform.SetParent(root.transform, worldPositionStays: false);
+            mainWing.transform.localPosition = Vector3.zero;
+            mainWing.transform.localScale = new Vector3(wingSpan, 0.06f, 0.35f);
+
+            GameObject tailWing = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            tailWing.name = "TailWing";
+            DestroyCollider(tailWing);
+            tailWing.transform.SetParent(root.transform, worldPositionStays: false);
+            tailWing.transform.localPosition = new Vector3(0f, 0f, -fuselageLength * 0.45f);
+            tailWing.transform.localScale = new Vector3(wingSpan * 0.45f, 0.05f, 0.2f);
+
+            return root.transform;
+        }
+
         public static Transform BuildMultirotorVisual(Transform parent, int rotorCount = 4, float armLength = 0.9f)
         {
             var root = new GameObject("Visual");

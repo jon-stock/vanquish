@@ -92,14 +92,19 @@ namespace Vanquish.Combat
             var flightBody = drone.AddComponent<FlightBody>();
             flightBody.Configure(stats.massKg, stats.thrustNewtons, stats.dragCoefficient, stats.maxGForce);
 
-            // Phase 1 Tier-0 drones are electric quadcopters (propeller + electric
-            // propulsion), not fixed-wing/jet aircraft: they're omnidirectional and
-            // shouldn't have a constant forward thrust or auto-orient to face their
-            // direction of travel — all movement comes from vectored steering force
-            // instead (AI guidance or player WASD input), same as a real multirotor's
-            // vectored thrust. Revisit once jet/fixed-wing propulsion tiers exist.
-            flightBody.isThrusting = false;
-            flightBody.orientToVelocity = false;
+            // Phase 2B: read the flight model from the design's propulsion choice instead
+            // of hardcoding quadcopter behavior for every drone. Electric multirotor
+            // propulsion (requiresForwardFlight = false) stays omnidirectional — no
+            // constant forward thrust, no auto-orient-to-velocity, all movement via
+            // vectored steering force (AI guidance or player WASD input), same as a real
+            // multirotor's vectored thrust. Fixed-wing/jet propulsion (requiresForwardFlight
+            // = true) behaves like a missile: constant forward thrust, orients nose to
+            // velocity. PlayerDroneController.Awake() still force-disables isThrusting for
+            // the player's own drone (manual WASD/vectored control regardless of airframe),
+            // matching Phase 1's control scheme; this only changes AI-controlled/default
+            // spawns and the underlying data-driven default.
+            flightBody.isThrusting = stats.requiresForwardFlight;
+            flightBody.orientToVelocity = stats.requiresForwardFlight;
 
             var signature = drone.AddComponent<DetectableSignature>();
             signature.radarCrossSection = stats.radarCrossSection;
@@ -123,15 +128,23 @@ namespace Vanquish.Combat
                 weapon.ownerTeam = team;
             }
 
-            // Procedural multirotor visual (body + arms + spinning rotors) — see
-            // DroneVisualBuilder. rotorCount is hardcoded to 4 for now, matching the
-            // Tier-0 SmallQuad airframe; will read DroneAirframeDefinition.rotorCount
-            // once the quadcopter->hexacopter upgrade path (Phase 2B) exists.
-            Transform visual = DroneVisualBuilder.BuildMultirotorVisual(drone.transform, rotorCount: 4);
+            // Procedural visual — see DroneVisualBuilder. Multirotor airframes (rotorCount > 0,
+            // i.e. SmallQuad/Hexacopter) get the arms+spinning-rotors mesh sized to the
+            // airframe's actual rotorCount (Phase 2B quadcopter->hexacopter upgrade path);
+            // fixed-wing-style airframes (FixedWing/FlyingWingStealth/CcaScale, rotorCount == 0)
+            // get the fuselage+wings silhouette instead so a jet drone doesn't spawn looking
+            // like a quadcopter.
+            bool isMultirotor = loadout.airframe.rotorCount > 0;
+            Transform visual = isMultirotor
+                ? DroneVisualBuilder.BuildMultirotorVisual(drone.transform, loadout.airframe.rotorCount)
+                : DroneVisualBuilder.BuildFixedWingVisual(drone.transform);
 
-            var tilt = drone.AddComponent<QuadcopterTiltVisual>();
-            tilt.body = rb;
-            tilt.visualRoot = visual;
+            if (isMultirotor)
+            {
+                var tilt = drone.AddComponent<QuadcopterTiltVisual>();
+                tilt.body = rb;
+                tilt.visualRoot = visual;
+            }
 
             if (CombatManager.Instance != null)
                 CombatManager.Instance.RegisterUnit(drone, team);

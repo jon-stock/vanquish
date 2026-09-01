@@ -1,3 +1,4 @@
+using UnityEngine;
 using Vanquish.Data.Drones;
 using Vanquish.Data.Missiles;
 
@@ -7,6 +8,7 @@ namespace Vanquish.Data
     public struct MissileRuntimeStats
     {
         public float massKg;
+        public float fuelMassKg;
         public float thrustNewtons;
         public float dragCoefficient;
         public float maxGForce;
@@ -18,12 +20,19 @@ namespace Vanquish.Data
         public float seekerRangeMeters;
         public float seekerFieldOfViewDegrees;
         public float jamResistance;
+
+        /// <summary>Airframe's MTOW limit in kg. 0 or less means no limit is configured.</summary>
+        public float maxTakeOffMassKg;
+
+        /// <summary>True if massKg is within maxTakeOffMassKg (or no limit is configured).</summary>
+        public bool isWithinMtow;
     }
 
     /// <summary>Aggregated, ready-to-spawn stats computed from a DroneLoadout.</summary>
     public struct DroneRuntimeStats
     {
         public float massKg;
+        public float fuelMassKg;
         public float thrustNewtons;
         public float dragCoefficient;
         public float maxGForce;
@@ -33,6 +42,17 @@ namespace Vanquish.Data
         public float sensorRangeMeters;
         public float sensorFieldOfViewDegrees;
         public bool sharesContactsWithTeam;
+
+        /// <summary>True for fixed-wing/jet propulsion (constant thrust, orients to velocity). False for
+        /// omnidirectional multirotor propulsion (hovers/strafes via vectored steering). Mirrors
+        /// PropulsionDefinition.requiresForwardFlight — VehicleFactory reads this to configure FlightBody.</summary>
+        public bool requiresForwardFlight;
+
+        /// <summary>Airframe's MTOW limit in kg. 0 or less means no limit is configured.</summary>
+        public float maxTakeOffMassKg;
+
+        /// <summary>True if massKg is within maxTakeOffMassKg (or no limit is configured).</summary>
+        public bool isWithinMtow;
     }
 
     /// <summary>
@@ -50,13 +70,20 @@ namespace Vanquish.Data
             if (loadout == null || !loadout.IsComplete)
                 return stats;
 
+            // Fuel mass scales with the continuous fill-level slider rather than always
+            // assuming a full tank — see MissileLoadout.fuelFillFraction.
+            stats.fuelMassKg = loadout.fuel.capacityKg * Mathf.Clamp01(loadout.fuelFillFraction);
+
             stats.massKg = loadout.airframe.massKg + loadout.airframe.structuralMassKg
                            + loadout.engine.massKg
                            + loadout.payload.massKg + loadout.payload.warheadMassKg
                            + loadout.seeker.massKg
-                           + loadout.fuel.massKg + loadout.fuel.capacityKg
+                           + loadout.fuel.massKg + stats.fuelMassKg
                            + (loadout.countermeasure != null ? loadout.countermeasure.massKg : 0f)
                            + (loadout.jamming != null ? loadout.jamming.massKg : 0f);
+
+            stats.maxTakeOffMassKg = loadout.airframe.maxTakeOffMassKg;
+            stats.isWithinMtow = stats.maxTakeOffMassKg <= 0f || stats.massKg <= stats.maxTakeOffMassKg;
 
             stats.thrustNewtons = loadout.engine.thrustNewtons;
             stats.dragCoefficient = loadout.airframe.dragCoefficient;
@@ -93,16 +120,25 @@ namespace Vanquish.Data
                 ? Calculate(loadout.missileLoadout).massKg * loadout.ammoCount
                 : 0f;
 
+            // Fuel/battery mass scales with the continuous fill-level slider rather than
+            // always assuming a full tank — see DroneLoadout.fuelFillFraction (Phase 2B,
+            // mirrors MissileLoadout.fuelFillFraction from 2A).
+            stats.fuelMassKg = loadout.fuel.capacityKg * Mathf.Clamp01(loadout.fuelFillFraction);
+
             stats.massKg = loadout.propulsion.massKg + loadout.airframe.massKg + loadout.airframe.structuralMassKg
                            + loadout.wingOrPropeller.massKg + loadout.hullMaterial.massKg + loadout.engine.massKg
-                           + loadout.fuel.massKg + loadout.fuel.capacityKg + loadout.weaponBay.massKg
+                           + loadout.fuel.massKg + stats.fuelMassKg + loadout.weaponBay.massKg
                            + loadout.sensorSuite.massKg + missileMass;
+
+            stats.maxTakeOffMassKg = loadout.airframe.maxTakeOffMassKg;
+            stats.isWithinMtow = stats.maxTakeOffMassKg <= 0f || stats.massKg <= stats.maxTakeOffMassKg;
 
             // Phase 1 simplification: DroneEngineDefinition.powerOutput is treated directly
             // as thrust in Newtons regardless of propulsion type. Revisit once electric vs.
             // jet propulsion need genuinely different force models.
             stats.thrustNewtons = loadout.engine.powerOutput;
             stats.dragCoefficient = loadout.airframe.dragCoefficient + loadout.wingOrPropeller.dragCoefficient;
+            stats.requiresForwardFlight = loadout.propulsion.requiresForwardFlight;
 
             // Phase 1 simplification: no real turn-rate-to-lateral-G conversion yet.
             // Keep this modest — quadcopters/small drones don't pull fighter-jet-style

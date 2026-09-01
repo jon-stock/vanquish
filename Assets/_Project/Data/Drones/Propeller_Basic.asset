@@ -27,3 +27,6 @@ MonoBehaviour:
   dragCoefficient: 0.05
   turnRateDegreesPerSecond: 180
   cruiseEfficiencyMultiplier: 1
+  rotorMaterial: 0
+  rotorSize: 0
+  structuralIntegrity: 1

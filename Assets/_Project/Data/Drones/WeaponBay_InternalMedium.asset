@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7023179bd4505ff40bfb31628bdff149, type: 3}
+  m_Name: WeaponBay_InternalMedium
+  m_EditorClassIdentifier: 
+  id: drone_weaponbay_internalmedium
+  displayName: Internal Medium Weapon Bay
+  description: 
+  icon: {fileID: 0}
+  category: 13
+  tier: 3
+  researchCost: 200
+  buildCost: 130
+  massKg: 3
+  prerequisites: []
+  payloadCapacityKg: 40
+  maxMunitionCount: 6
+  isInternal: 1
+  cycleTimeSeconds: 3

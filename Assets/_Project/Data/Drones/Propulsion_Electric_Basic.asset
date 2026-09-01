@@ -27,3 +27,4 @@ MonoBehaviour:
   accelerationMetersPerSecondSquared: 8
   acousticSignature: 0.3
   infraredSignature: 0.5
+  requiresForwardFlight: 0

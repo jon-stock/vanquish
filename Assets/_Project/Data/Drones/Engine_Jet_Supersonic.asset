@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9eacdbbb07e9fa54c848bca996c43b11, type: 3}
+  m_Name: Engine_Jet_Supersonic
+  m_EditorClassIdentifier: 
+  id: drone_engine_jet_supersonic
+  displayName: Supersonic Afterburning Turbojet
+  description: 
+  icon: {fileID: 0}
+  category: 11
+  tier: 4
+  researchCost: 340
+  buildCost: 230
+  massKg: 14
+  prerequisites: []
+  powerOutput: 6500
+  consumptionRatePerSecond: 8
+  infraredSignature: 3.5
+  reliability: 0.88
