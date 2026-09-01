@@ -1,0 +1,27 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:Style src="Workshop.uss" />
+    <ui:VisualElement name="root" class="root">
+        <ui:VisualElement name="currency-bar" class="currency-bar">
+            <ui:Label name="currency-label" text="Currency: 0" />
+        </ui:VisualElement>
+        <ui:VisualElement name="main-row" class="main-row">
+            <ui:VisualElement name="tech-tree-panel" class="panel">
+                <ui:Label text="Tech Tree" class="panel-header" />
+                <ui:ScrollView name="tech-tree-scroll" class="tech-tree-scroll" mode="Vertical" />
+            </ui:VisualElement>
+            <ui:VisualElement name="part-picker-panel" class="panel">
+                <ui:Label text="Missile Loadout" class="panel-header" />
+                <ui:ScrollView name="part-picker-scroll" class="part-picker-scroll" mode="Vertical" />
+            </ui:VisualElement>
+            <ui:VisualElement name="design-preview-panel" class="panel">
+                <ui:Label text="Current Design" class="panel-header" />
+                <ui:VisualElement name="missile-fuel-row" class="slider-row">
+                    <ui:Label name="missile-fuel-label" text="Fuel fill: 100%" class="slider-label" />
+                    <ui:Slider name="missile-fuel-slider" low-value="0" high-value="1" value="1" />
+                </ui:VisualElement>
+                <ui:VisualElement name="design-preview-content" class="design-preview-content" />
+                <ui:Button name="enter-combat-button" text="Enter Combat" class="enter-combat-button" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

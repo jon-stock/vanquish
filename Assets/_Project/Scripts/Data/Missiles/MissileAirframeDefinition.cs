@@ -20,5 +20,12 @@ namespace Vanquish.Data.Missiles
 
         [Tooltip("Maximum sustained heat before airframe degrades (relevant for hypersonic tiers).")]
         public float maxTemperatureCelsius;
+
+        [Header("Mass Budget")]
+        [Tooltip("Maximum Take-Off Weight in kg: total assembled mass (airframe + engine + " +
+            "payload + seeker + fuel-at-current-fill + optional modules) this airframe can " +
+            "carry. 0 or less means no limit is configured yet — DesignStatsCalculator " +
+            "treats that as unlimited until an author sets a real value.")]
+        public float maxTakeOffMassKg;
     }
 }

@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f096b90eb6c5faf4f8786c7e7b8fc77c, type: 3}
+  m_Name: Engine_Scramjet
+  m_EditorClassIdentifier: 
+  id: missile_engine_scramjet_basic
+  displayName: Scramjet Engine
+  description: 
+  icon: {fileID: 0}
+  category: 1
+  tier: 4
+  researchCost: 300
+  buildCost: 200
+  massKg: 10
+  prerequisites: []
+  propulsionType: 4
+  thrustNewtons: 4000
+  burnTimeSeconds: 18
+  maxSpeedMetersPerSecond: 1700
+  infraredSignature: 4

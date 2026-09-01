@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UIElements;
 using Vanquish.Core;
 using Vanquish.Data;
 using Vanquish.Data.Drones;
@@ -10,23 +12,33 @@ using Vanquish.Data.TechTree;
 namespace Vanquish.Workshop
 {
     /// <summary>
-    /// Phase 1 MVP Workshop: shows the linear tech tree with unlock buttons, the
-    /// resulting missile/drone design's computed stats once enough parts are
-    /// unlocked, and a button to enter combat. Implemented with OnGUI immediate-mode
-    /// rendering — no art/UI assets required, matching the MVP's "ugly art is fine"
-    /// scope (same rationale as HUDController). Replace with a proper UI in Phase 3.
+    /// Workshop: shows the linear tech tree with unlock buttons, a real multi-option
+    /// part picker for missile slots that have more than one unlocked variant (2A part
+    /// breadth), the resulting missile/drone design's computed stats once enough parts
+    /// are unlocked, and a button to enter combat. Built with UI Toolkit (UIDocument +
+    /// Workshop.uxml/.uss under Assets/_Project/UI/Workshop/) rather than OnGUI.
+    /// Phase1WorkshopSceneBuilder wires the UIDocument's visualTreeAsset/panelSettings
+    /// and all the part option arrays when it builds the scene.
     /// </summary>
+    [RequireComponent(typeof(UIDocument))]
     public class WorkshopController : MonoBehaviour
     {
         public TechNode[] techTree;
         public string combatSceneName = "Combat_Arena01";
 
-        [Header("Tier-0 Parts (for design stat preview)")]
+        [Header("Missile: single-option slots (only one variant seeded so far)")]
         public MissileAirframeDefinition missileAirframe;
-        public MissileEngineDefinition missileEngine;
-        public SeekerDefinition missileSeeker;
-        public MissilePayloadDefinition missilePayload;
         public FuelDefinition missileFuel;
+
+        [Header("Missile: multi-option picker slots (2A part breadth)")]
+        [Tooltip("Every candidate engine, unlocked or not — the picker filters to unlocked options at runtime.")]
+        public MissileEngineDefinition[] missileEngineOptions;
+        public SeekerDefinition[] missileSeekerOptions;
+        public MissilePayloadDefinition[] missilePayloadOptions;
+        [Tooltip("Optional slot — a design can have no countermeasure equipped.")]
+        public CountermeasureDefinition[] missileCountermeasureOptions;
+        [Tooltip("Optional slot — a design can have no jamming/ECM equipment equipped.")]
+        public JammingDefinition[] missileJammingOptions;
 
         public PropulsionDefinition dronePropulsion;
         public DroneAirframeDefinition droneAirframe;
@@ -38,62 +50,131 @@ namespace Vanquish.Workshop
         public SensorSuiteDefinition droneSensorBasic;
         public SensorSuiteDefinition droneSensorScout;
 
-        private Vector2 _techTreeScroll;
-        private GUIStyle _headerStyle;
-        private GUIStyle _labelStyle;
+        [Header("Continuous Sliders")]
+        [Tooltip("Missile fuel tank fill level (0-1). Trades range/burn time against mass and MTOW headroom.")]
+        [Range(0f, 1f)]
+        public float missileFuelFill = 1f;
+
+        // Current picker selections for the multi-option missile slots above. Not
+        // serialized/persisted across sessions — resolved to a sensible default
+        // (first unlocked option) each refresh by ResolveSelection.
+        private MissileEngineDefinition _selectedEngine;
+        private SeekerDefinition _selectedSeeker;
+        private MissilePayloadDefinition _selectedPayload;
+        private CountermeasureDefinition _selectedCountermeasure; // optional, may stay null
+        private JammingDefinition _selectedJamming; // optional, may stay null
+
+        private UIDocument _document;
+        private Label _currencyLabel;
+        private ScrollView _techTreeScroll;
+        private ScrollView _partPickerScroll;
+        private VisualElement _designPreviewContent;
+        private Slider _missileFuelSlider;
+        private Label _missileFuelLabel;
+        private Button _enterCombatButton;
+
+        private void Awake()
+        {
+            _document = GetComponent<UIDocument>();
+        }
+
+        private void OnEnable()
+        {
+            VisualElement root = _document.rootVisualElement;
+            _currencyLabel = root.Q<Label>("currency-label");
+            _techTreeScroll = root.Q<ScrollView>("tech-tree-scroll");
+            _partPickerScroll = root.Q<ScrollView>("part-picker-scroll");
+            _designPreviewContent = root.Q<VisualElement>("design-preview-content");
+            _missileFuelSlider = root.Q<Slider>("missile-fuel-slider");
+            _missileFuelLabel = root.Q<Label>("missile-fuel-label");
+            _enterCombatButton = root.Q<Button>("enter-combat-button");
+
+            _enterCombatButton.clicked += OnEnterCombatClicked;
+
+            _missileFuelSlider.lowValue = 0f;
+            _missileFuelSlider.highValue = 1f;
+            _missileFuelSlider.value = missileFuelFill;
+            _missileFuelSlider.RegisterValueChangedCallback(OnMissileFuelFillChanged);
+        }
+
+        private void OnDisable()
+        {
+            if (_enterCombatButton != null)
+                _enterCombatButton.clicked -= OnEnterCombatClicked;
+            if (_missileFuelSlider != null)
+                _missileFuelSlider.UnregisterValueChangedCallback(OnMissileFuelFillChanged);
+        }
+
+        private void OnMissileFuelFillChanged(ChangeEvent<float> evt)
+        {
+            missileFuelFill = evt.newValue;
+            RefreshDesignPreview(PlayerProgress.Instance);
+        }
 
         private void Start()
         {
             if (PlayerProgress.Instance != null)
                 PlayerProgress.Instance.Load();
+
+            RefreshAll();
         }
 
-        private void OnGUI()
+        private void RefreshAll()
         {
-            _headerStyle ??= new GUIStyle(GUI.skin.label) { fontSize = 22, fontStyle = FontStyle.Bold, normal = { textColor = Color.white } };
-            _labelStyle ??= new GUIStyle(GUI.skin.label) { fontSize = 16, normal = { textColor = Color.white } };
+            PlayerProgress progress = PlayerProgress.Instance;
 
-            var progress = PlayerProgress.Instance;
+            _currencyLabel.text = $"Currency: {(progress != null ? progress.Currency : 0)}";
 
-            GUI.Box(new Rect(10, 10, 300, 40), GUIContent.none);
-            GUI.Label(new Rect(20, 15, 280, 30), $"Currency: {(progress != null ? progress.Currency : 0)}", _headerStyle);
-
-            DrawTechTree(progress);
-            DrawDesignPreview(progress);
-            DrawEnterCombatButton(progress);
+            RefreshTechTree(progress);
+            RefreshPartPicker(progress);
+            RefreshDesignPreview(progress);
         }
 
-        private void DrawTechTree(PlayerProgress progress)
+        private void RefreshTechTree(PlayerProgress progress)
         {
-            const float panelX = 10, panelY = 60, panelW = 340, panelH = 500;
-            GUI.Box(new Rect(panelX, panelY, panelW, panelH), GUIContent.none);
-            GUI.Label(new Rect(panelX + 10, panelY + 5, panelW - 20, 25), "Tech Tree", _headerStyle);
+            _techTreeScroll.contentContainer.Clear();
 
-            _techTreeScroll = GUI.BeginScrollView(
-                new Rect(panelX + 5, panelY + 35, panelW - 10, panelH - 45),
-                _techTreeScroll,
-                new Rect(0, 0, panelW - 30, techTree.Length * 60));
+            if (techTree == null)
+                return;
 
-            for (int i = 0; i < techTree.Length; i++)
-            {
-                TechNode node = techTree[i];
-                float y = i * 60;
-                bool unlocked = progress != null && progress.IsUnlocked(node);
-                bool prereqsMet = ArePrerequisitesMet(progress, node);
-                bool affordable = progress != null && progress.CanAfford(node.researchCost);
+            foreach (TechNode node in techTree)
+                _techTreeScroll.contentContainer.Add(BuildTechRow(node, progress));
+        }
 
-                GUI.Label(new Rect(5, y, 220, 25), node.displayName, _labelStyle);
-                GUI.Label(new Rect(5, y + 22, 220, 20), unlocked ? "Unlocked" : $"Cost: {node.researchCost}", _labelStyle);
+        private VisualElement BuildTechRow(TechNode node, PlayerProgress progress)
+        {
+            bool unlocked = progress != null && progress.IsUnlocked(node);
+            bool prereqsMet = ArePrerequisitesMet(progress, node);
+            bool affordable = progress != null && progress.CanAfford(node.researchCost);
 
-                GUI.enabled = !unlocked && prereqsMet && affordable && progress != null;
-                if (GUI.Button(new Rect(230, y + 5, 80, 30), unlocked ? "Done" : "Unlock"))
-                {
-                    progress.TryUnlock(node);
-                }
-                GUI.enabled = true;
-            }
+            var row = new VisualElement();
+            row.AddToClassList("tech-row");
 
-            GUI.EndScrollView();
+            var info = new VisualElement();
+            info.AddToClassList("tech-row-info");
+
+            var nameLabel = new Label(node.displayName);
+            nameLabel.AddToClassList("tech-name-label");
+
+            var statusLabel = new Label(unlocked ? "Unlocked" : $"Cost: {node.researchCost}");
+            statusLabel.AddToClassList("tech-status-label");
+
+            info.Add(nameLabel);
+            info.Add(statusLabel);
+
+            var unlockButton = new Button(() => OnUnlockClicked(node)) { text = unlocked ? "Done" : "Unlock" };
+            unlockButton.AddToClassList("unlock-button");
+            unlockButton.SetEnabled(!unlocked && prereqsMet && affordable && progress != null);
+
+            row.Add(info);
+            row.Add(unlockButton);
+            return row;
+        }
+
+        private void OnUnlockClicked(TechNode node)
+        {
+            PlayerProgress.Instance?.TryUnlock(node);
+            RefreshAll();
         }
 
         private static bool ArePrerequisitesMet(PlayerProgress progress, TechNode node)
@@ -108,63 +189,206 @@ namespace Vanquish.Workshop
             return true;
         }
 
-        private void DrawDesignPreview(PlayerProgress progress)
+        /// <summary>
+        /// Builds the missile part picker: one row per multi-option slot, each row a
+        /// horizontal list of buttons for every currently-unlocked variant (filtered
+        /// from the full option arrays via PlayerProgress.IsPartUnlocked, same source
+        /// of truth the tech tree uses). Clicking an option button selects it and
+        /// immediately refreshes the design preview stats.
+        /// </summary>
+        private void RefreshPartPicker(PlayerProgress progress)
         {
-            const float panelX = 360, panelY = 60, panelW = 380, panelH = 500;
-            GUI.Box(new Rect(panelX, panelY, panelW, panelH), GUIContent.none);
-            GUI.Label(new Rect(panelX + 10, panelY + 5, panelW - 20, 25), "Current Design", _headerStyle);
+            if (_partPickerScroll == null)
+                return;
 
-            float y = panelY + 40;
+            // Resolve selections before building rows so the "selected" highlight and
+            // TryBuildMissileLoadout (called from RefreshDesignPreview right after this)
+            // agree on the same choice.
+            _selectedPayload = ResolveSelection(progress, missilePayloadOptions, _selectedPayload);
+            _selectedEngine = ResolveSelection(progress, missileEngineOptions, _selectedEngine);
+            _selectedSeeker = ResolveSelection(progress, missileSeekerOptions, _selectedSeeker);
+            _selectedCountermeasure = ResolveOptionalSelection(progress, missileCountermeasureOptions, _selectedCountermeasure);
+            _selectedJamming = ResolveOptionalSelection(progress, missileJammingOptions, _selectedJamming);
+
+            _partPickerScroll.contentContainer.Clear();
+
+            _partPickerScroll.contentContainer.Add(BuildPartSlotRow("Payload", missilePayloadOptions, progress,
+                _selectedPayload, allowNone: false, onSelect: selected => { _selectedPayload = selected; RefreshDesignPreview(progress); }));
+            _partPickerScroll.contentContainer.Add(BuildPartSlotRow("Engine", missileEngineOptions, progress,
+                _selectedEngine, allowNone: false, onSelect: selected => { _selectedEngine = selected; RefreshDesignPreview(progress); }));
+            _partPickerScroll.contentContainer.Add(BuildPartSlotRow("Seeker", missileSeekerOptions, progress,
+                _selectedSeeker, allowNone: false, onSelect: selected => { _selectedSeeker = selected; RefreshDesignPreview(progress); }));
+            _partPickerScroll.contentContainer.Add(BuildPartSlotRow("Countermeasure", missileCountermeasureOptions, progress,
+                _selectedCountermeasure, allowNone: true, onSelect: selected => { _selectedCountermeasure = selected; RefreshDesignPreview(progress); }));
+            _partPickerScroll.contentContainer.Add(BuildPartSlotRow("Jamming / ECM", missileJammingOptions, progress,
+                _selectedJamming, allowNone: true, onSelect: selected => { _selectedJamming = selected; RefreshDesignPreview(progress); }));
+        }
+
+        private VisualElement BuildPartSlotRow<T>(string slotLabel, T[] options, PlayerProgress progress, T selected,
+            bool allowNone, System.Action<T> onSelect) where T : PartDefinition
+        {
+            var row = new VisualElement();
+            row.AddToClassList("part-slot-row");
+
+            var slotNameLabel = new Label(slotLabel);
+            slotNameLabel.AddToClassList("part-slot-label");
+            row.Add(slotNameLabel);
+
+            var optionsRow = new VisualElement();
+            optionsRow.AddToClassList("part-option-row");
+
+            var unlockedOptions = new List<T>();
+            if (options != null && progress != null)
+            {
+                foreach (T option in options)
+                {
+                    if (option != null && progress.IsPartUnlocked(option, techTree))
+                        unlockedOptions.Add(option);
+                }
+            }
+
+            if (allowNone)
+            {
+                var noneButton = new Button(() => onSelect(null)) { text = "None" };
+                noneButton.AddToClassList("part-option-button");
+                if (selected == null)
+                    noneButton.AddToClassList("part-option-button-selected");
+                optionsRow.Add(noneButton);
+            }
+
+            foreach (T option in unlockedOptions)
+            {
+                var optionButton = new Button(() => onSelect(option)) { text = option.displayName };
+                optionButton.AddToClassList("part-option-button");
+                if (selected == option)
+                    optionButton.AddToClassList("part-option-button-selected");
+                optionsRow.Add(optionButton);
+            }
+
+            if (unlockedOptions.Count == 0 && !allowNone)
+            {
+                var emptyLabel = new Label("Unlock more tech");
+                emptyLabel.AddToClassList("part-slot-empty-label");
+                optionsRow.Add(emptyLabel);
+            }
+
+            row.Add(optionsRow);
+            return row;
+        }
+
+        /// <summary>
+        /// Required-slot selection resolution: keep the current selection if it's still
+        /// unlocked, otherwise fall back to the first unlocked option (so a player who
+        /// only has the Tier-0 variant unlocked still gets a working default, and a
+        /// stale/locked selection from a prior save never silently persists).
+        /// </summary>
+        private T ResolveSelection<T>(PlayerProgress progress, T[] options, T current) where T : PartDefinition
+        {
+            if (current != null && progress != null && progress.IsPartUnlocked(current, techTree))
+                return current;
+
+            if (options == null || progress == null)
+                return null;
+
+            foreach (T option in options)
+            {
+                if (option != null && progress.IsPartUnlocked(option, techTree))
+                    return option;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Optional-slot selection resolution: never auto-picks an option (an empty
+        /// countermeasure/jamming slot is a valid deliberate choice) — only clears the
+        /// selection if it becomes locked.
+        /// </summary>
+        private T ResolveOptionalSelection<T>(PlayerProgress progress, T[] options, T current) where T : PartDefinition
+        {
+            if (current == null)
+                return null;
+            if (progress == null || !progress.IsPartUnlocked(current, techTree))
+                return null;
+            return current;
+        }
+
+        private void RefreshDesignPreview(PlayerProgress progress)
+        {
+            _designPreviewContent.Clear();
+
+            _missileFuelLabel.text = $"Fuel fill: {missileFuelFill * 100f:F0}%";
+
+            bool missileWithinMtow = true;
 
             if (TryBuildMissileLoadout(progress, out MissileLoadout missileLoadout))
             {
                 var stats = DesignStatsCalculator.Calculate(missileLoadout);
-                GUI.Label(new Rect(panelX + 10, y, panelW - 20, 20), "Missile: READY", _labelStyle); y += 22;
-                GUI.Label(new Rect(panelX + 10, y, panelW - 20, 20), $"  Mass: {stats.massKg:F0} kg  Thrust: {stats.thrustNewtons:F0} N", _labelStyle); y += 20;
-                GUI.Label(new Rect(panelX + 10, y, panelW - 20, 20), $"  Damage: {stats.directDamage:F0} (+{stats.splashDamage:F0} splash, {stats.blastRadiusMeters:F0}m)", _labelStyle); y += 20;
-                GUI.Label(new Rect(panelX + 10, y, panelW - 20, 20), $"  Seeker range: {stats.seekerRangeMeters:F0} m", _labelStyle); y += 28;
+                missileWithinMtow = stats.isWithinMtow;
+
+                AddDesignLine(missileWithinMtow ? "Missile: READY" : "Missile: OVER MTOW LIMIT", ready: missileWithinMtow);
+                if (stats.maxTakeOffMassKg > 0f)
+                    AddDesignLine($"  Mass: {stats.massKg:F0} / {stats.maxTakeOffMassKg:F0} kg MTOW  Thrust: {stats.thrustNewtons:F0} N",
+                        ready: missileWithinMtow ? (bool?)null : false);
+                else
+                    AddDesignLine($"  Mass: {stats.massKg:F0} kg  Thrust: {stats.thrustNewtons:F0} N");
+                AddDesignLine($"  Fuel: {stats.fuelMassKg:F1} kg ({missileFuelFill * 100f:F0}% fill)");
+                AddDesignLine($"  Damage: {stats.directDamage:F0} (+{stats.splashDamage:F0} splash, {stats.blastRadiusMeters:F0}m)");
+                AddDesignLine($"  Seeker range: {stats.seekerRangeMeters:F0} m");
             }
             else
             {
-                GUI.Label(new Rect(panelX + 10, y, panelW - 20, 20), "Missile: incomplete — unlock more tech", _labelStyle); y += 28;
+                AddDesignLine("Missile: incomplete — unlock more tech", ready: false);
             }
 
             if (TryBuildDroneLoadout(progress, missileLoadout, includeWeapon: true, out DroneLoadout droneLoadout))
             {
                 var stats = DesignStatsCalculator.Calculate(droneLoadout);
-                GUI.Label(new Rect(panelX + 10, y, panelW - 20, 20), "Strike Drone: READY", _labelStyle); y += 22;
-                GUI.Label(new Rect(panelX + 10, y, panelW - 20, 20), $"  Mass: {stats.massKg:F0} kg  Health: {stats.maxHealth:F0}", _labelStyle); y += 20;
-                GUI.Label(new Rect(panelX + 10, y, panelW - 20, 20), $"  Sensor range: {stats.sensorRangeMeters:F0} m", _labelStyle); y += 28;
+                AddDesignLine("Strike Drone: READY", ready: true, header: true);
+                AddDesignLine($"  Mass: {stats.massKg:F0} kg  Health: {stats.maxHealth:F0}");
+                AddDesignLine($"  Sensor range: {stats.sensorRangeMeters:F0} m");
             }
             else
             {
-                GUI.Label(new Rect(panelX + 10, y, panelW - 20, 20), "Strike Drone: incomplete — unlock more tech", _labelStyle); y += 28;
+                AddDesignLine("Strike Drone: incomplete — unlock more tech", ready: false, header: true);
             }
 
             if (TryBuildDroneLoadout(progress, null, includeWeapon: false, out DroneLoadout scoutLoadout, useScoutSensor: true))
             {
                 var stats = DesignStatsCalculator.Calculate(scoutLoadout);
-                GUI.Label(new Rect(panelX + 10, y, panelW - 20, 20), "Scout Drone: READY", _labelStyle); y += 22;
-                GUI.Label(new Rect(panelX + 10, y, panelW - 20, 20), $"  Sensor range: {stats.sensorRangeMeters:F0} m (shares contacts)", _labelStyle); y += 20;
+                AddDesignLine("Scout Drone: READY", ready: true, header: true);
+                AddDesignLine($"  Sensor range: {stats.sensorRangeMeters:F0} m (shares contacts)");
             }
             else
             {
-                GUI.Label(new Rect(panelX + 10, y, panelW - 20, 20), "Scout Drone: incomplete — unlock more tech", _labelStyle);
+                AddDesignLine("Scout Drone: incomplete — unlock more tech", ready: false, header: true);
             }
+
+            bool combatReady = missileLoadout.IsComplete && missileWithinMtow &&
+                                TryBuildDroneLoadout(progress, null, true, out _) &&
+                                TryBuildDroneLoadout(progress, null, false, out _, useScoutSensor: true);
+
+            _enterCombatButton.SetEnabled(combatReady);
+            _enterCombatButton.text = combatReady
+                ? "Enter Combat"
+                : (!missileWithinMtow ? "Missile over MTOW — reduce fuel/parts" : "Unlock more tech to proceed");
         }
 
-        private void DrawEnterCombatButton(PlayerProgress progress)
+        private void AddDesignLine(string text, bool? ready = null, bool header = false)
         {
-            bool ready = TryBuildMissileLoadout(progress, out _) &&
-                         TryBuildDroneLoadout(progress, null, true, out _) &&
-                         TryBuildDroneLoadout(progress, null, false, out _, useScoutSensor: true);
+            var label = new Label(text);
+            label.AddToClassList("design-line");
+            if (header)
+                label.AddToClassList("design-header-line");
+            if (ready.HasValue)
+                label.AddToClassList(ready.Value ? "design-line-ready" : "design-line-incomplete");
+            _designPreviewContent.Add(label);
+        }
 
-            GUI.enabled = ready;
-            if (GUI.Button(new Rect(360, 570, 380, 50), ready ? "Enter Combat" : "Unlock more tech to proceed"))
-            {
-                SceneManager.LoadScene(combatSceneName);
-            }
-            GUI.enabled = true;
+        private void OnEnterCombatClicked()
+        {
+            if (!_enterCombatButton.enabledSelf)
+                return;
+            SceneManager.LoadScene(combatSceneName);
         }
 
         private bool TryBuildMissileLoadout(PlayerProgress progress, out MissileLoadout loadout)
@@ -174,10 +398,13 @@ namespace Vanquish.Workshop
                 return false;
 
             loadout.airframe = IsUnlocked(progress, missileAirframe) ? missileAirframe : null;
-            loadout.engine = IsUnlocked(progress, missileEngine) ? missileEngine : null;
-            loadout.seeker = IsUnlocked(progress, missileSeeker) ? missileSeeker : null;
-            loadout.payload = IsUnlocked(progress, missilePayload) ? missilePayload : null;
+            loadout.engine = IsUnlocked(progress, _selectedEngine) ? _selectedEngine : null;
+            loadout.seeker = IsUnlocked(progress, _selectedSeeker) ? _selectedSeeker : null;
+            loadout.payload = IsUnlocked(progress, _selectedPayload) ? _selectedPayload : null;
             loadout.fuel = IsUnlocked(progress, missileFuel) ? missileFuel : null;
+            loadout.countermeasure = IsUnlocked(progress, _selectedCountermeasure) ? _selectedCountermeasure : null;
+            loadout.jamming = IsUnlocked(progress, _selectedJamming) ? _selectedJamming : null;
+            loadout.fuelFillFraction = missileFuelFill;
             return loadout.IsComplete;
         }
 

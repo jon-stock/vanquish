@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d4c7676aacc9a0241aa42e9354898a46, type: 3}
+  m_Name: Payload_Cluster
+  m_EditorClassIdentifier: 
+  id: missile_payload_cluster
+  displayName: Cluster Submunition Dispenser
+  description: 
+  icon: {fileID: 0}
+  category: 0
+  tier: 2
+  researchCost: 150
+  buildCost: 90
+  massKg: 8
+  prerequisites: []
+  payloadType: 3
+  warheadMassKg: 10
+  blastRadiusMeters: 20
+  directDamage: 20
+  splashDamage: 45
+  requiresProximityFuse: 1

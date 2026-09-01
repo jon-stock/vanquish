@@ -118,7 +118,7 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
---- !u!1 &1880142401
+--- !u!1 &561728285
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -126,8 +126,9 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1880142403}
-  - component: {fileID: 1880142402}
+  - component: {fileID: 561728288}
+  - component: {fileID: 561728287}
+  - component: {fileID: 561728286}
   m_Layer: 0
   m_Name: WorkshopController
   m_TagString: Untagged
@@ -135,13 +136,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1880142402
+--- !u!114 &561728286
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1880142401}
+  m_GameObject: {fileID: 561728285}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bbaacb4651ba0014e9f9f76b08967f2f, type: 3}
@@ -158,12 +159,53 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 6fe4f6d6a5b831b4a8d899e9ba8394fd, type: 2}
   - {fileID: 11400000, guid: 0ec68e5e7b56c2e46ab7606f101a5b6a, type: 2}
   - {fileID: 11400000, guid: bf72e2a3405e9724fbca73cf4b6bc50b, type: 2}
+  - {fileID: 11400000, guid: 9472a74f2892c554da8f65c5c4e6bd48, type: 2}
+  - {fileID: 11400000, guid: 384024ba2e77c8845a6203f1d0d53a77, type: 2}
+  - {fileID: 11400000, guid: 08525518573c34740ad04e816dbcedd4, type: 2}
+  - {fileID: 11400000, guid: dee5f29e97f01d94cbd24449198390a4, type: 2}
+  - {fileID: 11400000, guid: 682beb50d55ef994691dde85d69d240c, type: 2}
+  - {fileID: 11400000, guid: 2801924ef05fcab44b8e51c638c0e8b1, type: 2}
+  - {fileID: 11400000, guid: d6e879662e12d6e4ebd1d947b3713729, type: 2}
+  - {fileID: 11400000, guid: dc778a60e06abe54081d47174e34e89f, type: 2}
+  - {fileID: 11400000, guid: 203cbdd78847f864aa926f87d52bbeaa, type: 2}
+  - {fileID: 11400000, guid: d6b526cc997998e46933f35836cd0a9b, type: 2}
+  - {fileID: 11400000, guid: 488e9123baa6fb94fa93cc0b0c6d85f8, type: 2}
+  - {fileID: 11400000, guid: 3b18a41e724155a47a92b82eb2d587e4, type: 2}
+  - {fileID: 11400000, guid: 0cb85eb9129f26044803838a9b40e724, type: 2}
+  - {fileID: 11400000, guid: 9fb3867dfaaf68348aa3e90a302a9bd3, type: 2}
+  - {fileID: 11400000, guid: c28447356583cee43a26524f7b318260, type: 2}
+  - {fileID: 11400000, guid: 3b329bba800ae894db71c541705d4ab2, type: 2}
+  - {fileID: 11400000, guid: 89a0bb42cd919ed42ad43446ef697c66, type: 2}
+  - {fileID: 11400000, guid: fc3f7aa7e5f68cf45bb29ab3a81fdb31, type: 2}
   combatSceneName: Combat_Arena01
   missileAirframe: {fileID: 11400000, guid: 978e5dec3b2fe354ba9dfc39421a4393, type: 2}
-  missileEngine: {fileID: 11400000, guid: ebc413f82d7a8514786ac467c994dd45, type: 2}
-  missileSeeker: {fileID: 11400000, guid: 8f3c4f9fcdd950e4ca2da0b3dee4541b, type: 2}
-  missilePayload: {fileID: 11400000, guid: 7df5f1b524e2ad04eac436d3a40c21c1, type: 2}
   missileFuel: {fileID: 11400000, guid: 1e0a581977b7cd248b0bdf6ee1d97462, type: 2}
+  missileEngineOptions:
+  - {fileID: 11400000, guid: ebc413f82d7a8514786ac467c994dd45, type: 2}
+  - {fileID: 11400000, guid: 3fccb8edd99f3954d93b8a0fd5f57725, type: 2}
+  - {fileID: 11400000, guid: 6fc23ca23e7168a458eb3c6ac43475d6, type: 2}
+  - {fileID: 11400000, guid: 39efae18a48e3354ea0f326f3910ed03, type: 2}
+  missileSeekerOptions:
+  - {fileID: 11400000, guid: 8f3c4f9fcdd950e4ca2da0b3dee4541b, type: 2}
+  - {fileID: 11400000, guid: 6d7d689d6c3605945a660235780b279e, type: 2}
+  - {fileID: 11400000, guid: 743f2253afeb744449fc89b544eb1cb5, type: 2}
+  - {fileID: 11400000, guid: f8efc52c6deff5f4db42c7d77efd2cc4, type: 2}
+  - {fileID: 11400000, guid: 12fdef42cc41877458a84460e328ec14, type: 2}
+  - {fileID: 11400000, guid: e9e3687497e348048a1678f7bac5bd24, type: 2}
+  - {fileID: 11400000, guid: 98d2e33e6e913b94da2d90189ca48fdb, type: 2}
+  - {fileID: 11400000, guid: 3cad3ac500c85db42a45c4510234c3c0, type: 2}
+  missilePayloadOptions:
+  - {fileID: 11400000, guid: 7df5f1b524e2ad04eac436d3a40c21c1, type: 2}
+  - {fileID: 11400000, guid: 8b2551cae4035fb4bb1b7a054b0601f8, type: 2}
+  - {fileID: 11400000, guid: 0d57ad4a602343c43a0ebcc335330998, type: 2}
+  - {fileID: 11400000, guid: e0572f0b1f8ddfb48b640f98a8c971d1, type: 2}
+  - {fileID: 11400000, guid: 362a407603c8d73458464a4e82786b9b, type: 2}
+  missileCountermeasureOptions:
+  - {fileID: 11400000, guid: cecd329c663494244a1fea38be1409ef, type: 2}
+  - {fileID: 11400000, guid: 5a449313ac7bff54e85a2a5ff29b580a, type: 2}
+  missileJammingOptions:
+  - {fileID: 11400000, guid: e74d9be9c83681e45bb679468181a9ed, type: 2}
+  - {fileID: 11400000, guid: f7e4bafcf12fb2c478ed4de2d5662836, type: 2}
   dronePropulsion: {fileID: 11400000, guid: 5a091eb9a788ae546a90f444e22f7cbc, type: 2}
   droneAirframe: {fileID: 11400000, guid: aeb833a2f90ded04e861d5c3754daf5a, type: 2}
   droneWing: {fileID: 11400000, guid: 1935aa23c42cc1249a8843acc8db9b5c, type: 2}
@@ -173,13 +215,33 @@ MonoBehaviour:
   droneWeaponBay: {fileID: 11400000, guid: f1c500850e5a00c41b80289fd30f19e3, type: 2}
   droneSensorBasic: {fileID: 11400000, guid: 7879fc42beca37d40a0120415e56746b, type: 2}
   droneSensorScout: {fileID: 11400000, guid: e77cc89c12f85e74499fd5c907c21e8c, type: 2}
---- !u!4 &1880142403
+  missileFuelFill: 1
+--- !u!114 &561728287
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 561728285}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_PanelSettings: {fileID: 11400000, guid: 06a55466022668f48a0fc1d3ace21996, type: 2}
+  m_ParentUI: {fileID: 0}
+  sourceAsset: {fileID: 9197481963319205126, guid: 405f130eb8da3f94886c8ca694e2f185, type: 3}
+  m_SortingOrder: 0
+  m_WorldSpaceSizeMode: 1
+  m_WorldSpaceWidth: 1920
+  m_WorldSpaceHeight: 1080
+--- !u!4 &561728288
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1880142401}
+  m_GameObject: {fileID: 561728285}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -188,7 +250,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &2120059221
+--- !u!1 &628048175
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -196,8 +258,8 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 2120059223}
-  - component: {fileID: 2120059222}
+  - component: {fileID: 628048177}
+  - component: {fileID: 628048176}
   m_Layer: 0
   m_Name: GameBootstrap
   m_TagString: Untagged
@@ -205,25 +267,25 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &2120059222
+--- !u!114 &628048176
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2120059221}
+  m_GameObject: {fileID: 628048175}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1bfc31147f123c6488ebf0a2e41a66d3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
---- !u!4 &2120059223
+--- !u!4 &628048177
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2120059221}
+  m_GameObject: {fileID: 628048175}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -236,5 +298,5 @@ Transform:
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
-  - {fileID: 2120059223}
-  - {fileID: 1880142403}
+  - {fileID: 628048177}
+  - {fileID: 561728288}

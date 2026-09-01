@@ -6,9 +6,11 @@ namespace Vanquish.EditorTools
 {
     /// <summary>
     /// Headlessly opens the Workshop scene, enters Play mode briefly, and exits — a
-    /// quick smoke test to catch NullReferenceExceptions on scene load/Start before
-    /// asking a human to click through the UI (which OnGUI can't be scripted headlessly
-    /// in a meaningful way, so that part is inherently a manual test).
+    /// quick smoke test to catch NullReferenceExceptions on scene load/Start (UIDocument
+    /// wiring, part references, PlayerProgress) before asking a human to click through
+    /// the UI. Simulating actual UI Toolkit button clicks headlessly is possible but
+    /// not done here yet — that would be a natural follow-up once the Workshop UI is
+    /// stable, not required for this crash-smoke check.
     /// </summary>
     [InitializeOnLoad]
     public static class Phase1WorkshopSmokeTest
@@ -27,6 +29,13 @@ namespace Vanquish.EditorTools
         [MenuItem("Vanquish/Phase 1/Run Workshop Smoke Test")]
         public static void RunTest()
         {
+            if (EditorApplication.isPlaying)
+            {
+                Debug.LogError("[Phase1WorkshopSmokeTest] Already in Play mode — stop it first (Play button or "
+                    + "Ctrl+P), then re-run this test. EditorSceneManager.OpenScene cannot run during Play mode.");
+                return;
+            }
+
             EditorSceneManager.OpenScene(ScenePath);
             SessionState.SetBool(RunningKey, true);
             SessionState.SetFloat(StartTimeKey, (float)EditorApplication.timeSinceStartup);
@@ -44,9 +53,22 @@ namespace Vanquish.EditorTools
             {
                 EditorApplication.update -= Tick;
                 SessionState.SetBool(RunningKey, false);
-                Debug.Log("[Phase1WorkshopSmokeTest] Ran without crashing, exiting.");
                 EditorApplication.isPlaying = false;
-                EditorApplication.Exit(0);
+
+                // Only force-quit the whole Editor process in true headless/CI runs
+                // (Unity.exe -batchmode ...). Calling EditorApplication.Exit here when
+                // triggered interactively from the menu would abruptly close the whole
+                // Editor with no dialog and no guaranteed time to flush this log line —
+                // which looks exactly like a crash to a human running the test by hand.
+                if (Application.isBatchMode)
+                {
+                    Debug.Log("[Phase1WorkshopSmokeTest] Ran without crashing, exiting Editor (batch mode).");
+                    EditorApplication.Exit(0);
+                }
+                else
+                {
+                    Debug.Log("[Phase1WorkshopSmokeTest] Ran without crashing, stopping Play mode.");
+                }
             }
         }
     }

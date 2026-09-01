@@ -27,3 +27,4 @@ MonoBehaviour:
   maxGForce: 25
   baseRadarCrossSection: 0.05
   maxTemperatureCelsius: 200
+  maxTakeOffMassKg: 40

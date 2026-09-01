@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5838be6bb0ec882449e47b85b92859ee, type: 3}
+  m_Name: TN_2A_missile_seeker_multispectral
+  m_EditorClassIdentifier: 
+  id: TN_2A_missile_seeker_multispectral
+  displayName: Multi-Spectral Seeker
+  description: 
+  tier: 3
+  researchCost: 260
+  prerequisites:
+  - {fileID: 11400000, guid: 3b18a41e724155a47a92b82eb2d587e4, type: 2}
+  - {fileID: 11400000, guid: 0cb85eb9129f26044803838a9b40e724, type: 2}
+  unlocks:
+  - {fileID: 11400000, guid: 3cad3ac500c85db42a45c4510234c3c0, type: 2}
+  graphPosition: {x: 0, y: 0}

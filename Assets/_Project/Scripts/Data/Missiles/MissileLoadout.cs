@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 using Vanquish.Data.Shared;
 
 namespace Vanquish.Data.Missiles
@@ -21,6 +22,12 @@ namespace Vanquish.Data.Missiles
         public FuelDefinition fuel;
         public CountermeasureDefinition countermeasure; // optional, may be null
         public JammingDefinition jamming; // optional, may be null
+
+        [Tooltip("Continuous fuel tank fill level (0 = empty, 1 = full capacity) — the " +
+            "'Continuous Sliders' concept from the design doc. Trades range/burn time " +
+            "against total mass and MTOW headroom for other parts.")]
+        [Range(0f, 1f)]
+        public float fuelFillFraction = 1f;
 
         public bool IsComplete => payload != null && engine != null && airframe != null && seeker != null && fuel != null;
     }
