@@ -55,6 +55,13 @@ namespace Vanquish.EditorTools
             var combatManagerGo = new GameObject("CombatManager");
             var combatManager = combatManagerGo.AddComponent<CombatManager>();
 
+            // Runs in Awake(), before CombatManager's own Start() scans the scene for
+            // units — see CombatPlayerLoadoutApplier's doc comment. Swaps the player/
+            // scout drones below for whatever was configured in the Workshop, if
+            // anything was (no-ops otherwise, e.g. for headless regression tests that
+            // open this scene directly without a PlayerProgress pending loadout).
+            combatManagerGo.AddComponent<CombatPlayerLoadoutApplier>();
+
             var teamAwarenessGo = new GameObject("TeamAwareness");
             teamAwarenessGo.AddComponent<TeamAwareness>();
 

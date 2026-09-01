@@ -48,6 +48,11 @@ namespace Vanquish.Data
         /// PropulsionDefinition.requiresForwardFlight — VehicleFactory reads this to configure FlightBody.</summary>
         public bool requiresForwardFlight;
 
+        /// <summary>Wing lift coefficient (WingOrPropellerDefinition.liftCoefficient) — only meaningful
+        /// when requiresForwardFlight is true; feeds FlightBody's simplified aerodynamic lift model
+        /// (lift force = liftCoefficient * speed^2 along transform.up) for fixed-wing/jet drones.</summary>
+        public float liftCoefficient;
+
         /// <summary>Airframe's MTOW limit in kg. 0 or less means no limit is configured.</summary>
         public float maxTakeOffMassKg;
 
@@ -139,6 +144,7 @@ namespace Vanquish.Data
             stats.thrustNewtons = loadout.engine.powerOutput;
             stats.dragCoefficient = loadout.airframe.dragCoefficient + loadout.wingOrPropeller.dragCoefficient;
             stats.requiresForwardFlight = loadout.propulsion.requiresForwardFlight;
+            stats.liftCoefficient = loadout.wingOrPropeller.liftCoefficient;
 
             // Phase 1 simplification: no real turn-rate-to-lateral-G conversion yet.
             // Keep this modest — quadcopters/small drones don't pull fighter-jet-style

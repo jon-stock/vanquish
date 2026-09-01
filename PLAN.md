@@ -398,8 +398,40 @@ of the loop still behaves correctly.
 (✅ — Propulsion: 4, Airframe: 5, WingOrPropeller: 13, HullMaterial: 5, Engine: 4,
 Fuel: 4, WeaponBay: 3, SensorSuite: 2 from Phase 1, unchanged); a fixed-wing supersonic
 jet drone and an electric quadcopter both exist and both fly according to their own
-propulsion model (✅ — `requiresForwardFlight` now drives `FlightBody` per-design,
-verified via headless regression); a drone can hold `RelativeAGL` altitude over sloped
+propulsion model (✅ — verified via headless regression **and** live playtesting, which
+caught real gaps headless verification alone couldn't have: `requiresForwardFlight`
+drove `FlightBody`'s per-design *values* correctly (verified headlessly), but
+(1) `PlayerDroneController` unconditionally forced `isThrusting = false` regardless of
+airframe, so the player's own jet/fixed-wing drone still flew like a quadcopter even
+though AI-controlled/default spawns were already correct, and (2) `FlightBody` itself
+had no real aerodynamic model yet — exactly the gap its own long-standing doc comment
+flagged ("sufficient to validate... before investing in a full aerodynamic model in
+Phase 2") — so even with the propulsion flag read correctly, a fixed-wing drone had no
+lift to stay airborne and no distinct player control feel.
+Both are now fixed. `FlightBody` gained a real (if simplified) aerodynamic model,
+opt-in via `useAerodynamicLift`: lift force along `transform.up`, quadratic in speed
+(`liftCoefficient * speed²`, from the design's wing part — `WingOrPropellerDefinition.
+liftCoefficient` was already a field but was never actually consumed by physics before
+this), clamped to `maxGForce`; gravity is force-enabled alongside it. Deliberately no
+separate tunable "stall speed" — the quadratic falloff at low speed already produces a
+natural nose-drop/stall on its own. A second `FlightBody.Configure` overload engages
+this (missile/multirotor spawn code keeps using the original 4-argument overload
+unchanged). `PlayerDroneController` now has two genuinely distinct control schemes
+selected per-design at spawn time (from `FlightBody.isThrusting`): multirotor keeps the
+original omnidirectional `ApplySteering`-based hover/strafe/auto-brake; fixed-wing/jet
+gets a dedicated roll-to-turn stick-and-throttle model instead — **A/D roll (bank)**,
+**W/S pitch (climb/dive)**, **Space/Shift throttle** — deliberately with *no direct yaw
+input at all*, turning instead emerging from banking + pulling into the turn (same as a
+real aircraft/most arcade flight games), which the new lift model makes physically
+meaningful since banking tilts the lift vector sideways and curves the flight path.
+Rotation is driven directly via `Rigidbody.MoveRotation` rather than through
+`FlightBody.ApplySteering`, and a new `FlightBody.alignVelocityToForward` flag (damps
+velocity components perpendicular to `transform.forward`) is enabled for the player
+specifically — the opposite relationship from `orientToVelocity` (nose chases
+velocity, still used unchanged by missile/AI guidance) — so the flight path follows
+wherever the player points the nose rather than fighting a velocity-chasing autopilot,
+which a first pass (reusing `orientToVelocity` + a direct-yaw input) found felt far too
+subtle/momentum-dominated and had no throttle at all; a drone can hold `RelativeAGL` altitude over sloped
 terrain (⚠️ system implemented and headlessly verified against the target-resolution
 math, but no sloped terrain exists in the project yet to test against live — see
 technical note above) and land safely on at least one surface type (✅ — verified via

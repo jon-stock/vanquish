@@ -90,19 +90,27 @@ namespace Vanquish.Combat
             rb.useGravity = false;
 
             var flightBody = drone.AddComponent<FlightBody>();
-            flightBody.Configure(stats.massKg, stats.thrustNewtons, stats.dragCoefficient, stats.maxGForce);
 
             // Phase 2B: read the flight model from the design's propulsion choice instead
             // of hardcoding quadcopter behavior for every drone. Electric multirotor
             // propulsion (requiresForwardFlight = false) stays omnidirectional — no
-            // constant forward thrust, no auto-orient-to-velocity, all movement via
+            // constant forward thrust, no auto-orient-to-velocity, no gravity/lift
+            // (it gets vertical lift for free from vectored thrust), all movement via
             // vectored steering force (AI guidance or player WASD input), same as a real
             // multirotor's vectored thrust. Fixed-wing/jet propulsion (requiresForwardFlight
-            // = true) behaves like a missile: constant forward thrust, orients nose to
-            // velocity. PlayerDroneController.Awake() still force-disables isThrusting for
-            // the player's own drone (manual WASD/vectored control regardless of airframe),
-            // matching Phase 1's control scheme; this only changes AI-controlled/default
-            // spawns and the underlying data-driven default.
+            // = true) gets a real (simplified) aerodynamic model instead: constant forward
+            // thrust, gravity + speed-squared lift from the wing part's liftCoefficient
+            // (via the lift-aware Configure overload), and orients nose to velocity — the
+            // right relationship for AI/missile-style guidance (steer laterally, let the
+            // body align to the resulting velocity). PlayerDroneController overrides
+            // orientToVelocity for the player's own drone specifically (direct player
+            // stick control instead — see its class comment for why), reading isThrusting
+            // at spawn time (set here) to decide which control scheme applies.
+            if (stats.requiresForwardFlight)
+                flightBody.Configure(stats.massKg, stats.thrustNewtons, stats.dragCoefficient, stats.maxGForce, stats.liftCoefficient);
+            else
+                flightBody.Configure(stats.massKg, stats.thrustNewtons, stats.dragCoefficient, stats.maxGForce);
+
             flightBody.isThrusting = stats.requiresForwardFlight;
             flightBody.orientToVelocity = stats.requiresForwardFlight;
 

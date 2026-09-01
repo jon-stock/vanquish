@@ -42,6 +42,20 @@ namespace Vanquish.EditorTools
             var bootstrapGo = new GameObject("GameBootstrap");
             bootstrapGo.AddComponent<PlayerProgress>();
 
+            // The Workshop UI is pure UI Toolkit (UIDocument, Screen Space - Overlay) and
+            // renders fine with zero cameras — but the Editor Game View shows a "No
+            // cameras rendering" placeholder over everything whenever a scene has none,
+            // which is a harmless but annoying overlay during playtesting. A minimal
+            // solid-color camera silences that with no visible effect otherwise (nothing
+            // else in this scene needs 3D rendering).
+            var cameraGo = new GameObject("Background Camera");
+            cameraGo.tag = "MainCamera";
+            var camera = cameraGo.AddComponent<Camera>();
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = Color.black;
+            camera.cullingMask = 0; // nothing to render — this exists solely to clear the Game View
+            cameraGo.AddComponent<AudioListener>();
+
             var workshopGo = new GameObject("WorkshopController");
 
             var uiDocument = workshopGo.AddComponent<UIDocument>();

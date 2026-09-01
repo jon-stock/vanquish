@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using Vanquish.Data;
+using Vanquish.Data.Drones;
 using Vanquish.Data.TechTree;
 
 namespace Vanquish.Core
@@ -17,6 +18,25 @@ namespace Vanquish.Core
 
         public int Currency { get; private set; }
         private readonly HashSet<string> _unlockedTechNodeIds = new HashSet<string>();
+
+        /// <summary>
+        /// The player's currently-configured strike/scout drone designs, carried across
+        /// the Workshop -> Combat scene transition. Set by WorkshopController.
+        /// OnEnterCombatClicked right before it loads the combat scene; read (and left
+        /// set, not cleared) by CombatPlayerLoadoutApplier at the start of the combat
+        /// scene so the player's own drone actually reflects what was picked in the
+        /// Workshop, instead of Combat_Arena01's editor-time-baked Tier-0 default.
+        /// Deliberately in-memory only (not part of SaveData/SaveSystem) — this is
+        /// transient "what to spawn next" state, not persistent progression; it
+        /// survives the scene load because this MonoBehaviour is DontDestroyOnLoad,
+        /// and resets naturally on app restart along with everything else not written
+        /// to disk. Null means "no override — keep whatever's already baked into the
+        /// combat scene", which is what lets Combat_Arena01 still work when entered
+        /// directly (headless batch regression tests, or opening the scene without ever
+        /// visiting Workshop) instead of crashing on a missing loadout.
+        /// </summary>
+        public DroneLoadout PendingStrikeDroneLoadout { get; set; }
+        public DroneLoadout PendingScoutDroneLoadout { get; set; }
 
         private void Awake()
         {

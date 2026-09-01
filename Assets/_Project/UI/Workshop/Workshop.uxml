@@ -3,6 +3,7 @@
     <ui:VisualElement name="root" class="root">
         <ui:VisualElement name="currency-bar" class="currency-bar">
             <ui:Label name="currency-label" text="Currency: 0" />
+            <ui:Button name="debug-add-currency-button" text="+10,000 (Debug)" class="debug-currency-button" />
         </ui:VisualElement>
         <ui:VisualElement name="main-row" class="main-row">
             <ui:VisualElement name="tech-tree-panel" class="panel">

@@ -87,6 +87,11 @@ namespace Vanquish.Workshop
         private Slider _missileFuelSlider;
         private Label _missileFuelLabel;
         private Button _enterCombatButton;
+        private Button _debugAddCurrencyButton;
+
+        /// <summary>How much currency the debug "+10,000 (Debug)" button grants per click.
+        /// Editor/development-build only — see OnEnable.</summary>
+        private const int DebugCurrencyGrant = 10000;
 
         private void Awake()
         {
@@ -103,8 +108,19 @@ namespace Vanquish.Workshop
             _missileFuelSlider = root.Q<Slider>("missile-fuel-slider");
             _missileFuelLabel = root.Q<Label>("missile-fuel-label");
             _enterCombatButton = root.Q<Button>("enter-combat-button");
+            _debugAddCurrencyButton = root.Q<Button>("debug-add-currency-button");
 
             _enterCombatButton.clicked += OnEnterCombatClicked;
+
+            // Debug-only currency cheat for testing the tech tree/part picker without
+            // grinding combat victories — never shown in a non-development player build.
+            // Application.isEditor covers Editor Play mode; Debug.isDebugBuild covers
+            // Development Builds so QA/testers get it too without shipping it in a
+            // release build.
+            bool showDebugTools = Application.isEditor || Debug.isDebugBuild;
+            _debugAddCurrencyButton.style.display = showDebugTools ? DisplayStyle.Flex : DisplayStyle.None;
+            if (showDebugTools)
+                _debugAddCurrencyButton.clicked += OnDebugAddCurrencyClicked;
 
             _missileFuelSlider.lowValue = 0f;
             _missileFuelSlider.highValue = 1f;
@@ -116,8 +132,16 @@ namespace Vanquish.Workshop
         {
             if (_enterCombatButton != null)
                 _enterCombatButton.clicked -= OnEnterCombatClicked;
+            if (_debugAddCurrencyButton != null)
+                _debugAddCurrencyButton.clicked -= OnDebugAddCurrencyClicked;
             if (_missileFuelSlider != null)
                 _missileFuelSlider.UnregisterValueChangedCallback(OnMissileFuelFillChanged);
+        }
+
+        private void OnDebugAddCurrencyClicked()
+        {
+            PlayerProgress.Instance?.AddCurrency(DebugCurrencyGrant);
+            RefreshAll();
         }
 
         private void OnMissileFuelFillChanged(ChangeEvent<float> evt)
@@ -387,12 +411,29 @@ namespace Vanquish.Workshop
                 AddDesignLine("Missile: incomplete — unlock more tech", ready: false);
             }
 
+            bool strikeDroneWithinMtow = true;
+
             if (TryBuildDroneLoadout(progress, missileLoadout, includeWeapon: true, out DroneLoadout droneLoadout))
             {
                 var stats = DesignStatsCalculator.Calculate(droneLoadout);
-                AddDesignLine("Strike Drone: READY", ready: true, header: true);
-                AddDesignLine($"  Mass: {stats.massKg:F0} kg  Health: {stats.maxHealth:F0}");
+                strikeDroneWithinMtow = stats.isWithinMtow;
+
+                AddDesignLine(strikeDroneWithinMtow ? "Strike Drone: READY" : "Strike Drone: OVER MTOW LIMIT",
+                    ready: strikeDroneWithinMtow, header: true);
+                if (stats.maxTakeOffMassKg > 0f)
+                    AddDesignLine($"  Mass: {stats.massKg:F0} / {stats.maxTakeOffMassKg:F0} kg MTOW  Health: {stats.maxHealth:F0}",
+                        ready: strikeDroneWithinMtow ? (bool?)null : false);
+                else
+                    AddDesignLine($"  Mass: {stats.massKg:F0} kg  Health: {stats.maxHealth:F0}");
                 AddDesignLine($"  Sensor range: {stats.sensorRangeMeters:F0} m");
+                // Airframe (visual shape) and Propulsion (actual flight physics) are two
+                // separate picker slots — a Fixed-Wing/Flying-Wing airframe does NOT
+                // automatically switch propulsion away from electric. Surface both here
+                // explicitly so "picked a jet-looking airframe but it still flies like a
+                // quadcopter" is visible in the picker instead of only discoverable by
+                // flying it (which is exactly what happened testing this feature).
+                string flightModel = stats.requiresForwardFlight ? "Fixed-wing/jet" : "Multirotor";
+                AddDesignLine($"  Propulsion: {droneLoadout.propulsion.displayName} ({flightModel} flight model)");
             }
             else
             {
@@ -410,14 +451,15 @@ namespace Vanquish.Workshop
                 AddDesignLine("Scout Drone: incomplete — unlock more tech", ready: false, header: true);
             }
 
-            bool combatReady = missileLoadout.IsComplete && missileWithinMtow &&
+            bool combatReady = missileLoadout.IsComplete && missileWithinMtow && strikeDroneWithinMtow &&
                                 TryBuildDroneLoadout(progress, null, true, out _) &&
                                 TryBuildDroneLoadout(progress, null, false, out _, useScoutSensor: true);
 
             _enterCombatButton.SetEnabled(combatReady);
             _enterCombatButton.text = combatReady
                 ? "Enter Combat"
-                : (!missileWithinMtow ? "Missile over MTOW — reduce fuel/parts" : "Unlock more tech to proceed");
+                : (!missileWithinMtow ? "Missile over MTOW — reduce fuel/parts"
+                    : (!strikeDroneWithinMtow ? "Strike drone over MTOW — reduce fuel/parts" : "Unlock more tech to proceed"));
         }
 
         private void AddDesignLine(string text, bool? ready = null, bool header = false)
@@ -435,6 +477,24 @@ namespace Vanquish.Workshop
         {
             if (!_enterCombatButton.enabledSelf)
                 return;
+
+            // Stash the actual configured designs on PlayerProgress (a DontDestroyOnLoad
+            // singleton that survives the scene load) so the combat scene's
+            // CombatPlayerLoadoutApplier can spawn the player's real chosen loadout
+            // instead of Combat_Arena01's editor-time-baked Tier-0 default. Without
+            // this, every part-picker selection in this UI would be purely cosmetic —
+            // it would compute preview stats here and then have zero effect on the
+            // actual battle.
+            PlayerProgress progress = PlayerProgress.Instance;
+            if (progress != null)
+            {
+                TryBuildMissileLoadout(progress, out MissileLoadout missileLoadout);
+                if (TryBuildDroneLoadout(progress, missileLoadout, includeWeapon: true, out DroneLoadout strikeLoadout))
+                    progress.PendingStrikeDroneLoadout = strikeLoadout;
+                if (TryBuildDroneLoadout(progress, null, includeWeapon: false, out DroneLoadout scoutLoadout, useScoutSensor: true))
+                    progress.PendingScoutDroneLoadout = scoutLoadout;
+            }
+
             SceneManager.LoadScene(combatSceneName);
         }
 

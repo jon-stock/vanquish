@@ -20,6 +20,14 @@
     color: rgb(255, 255, 255);
 }
 
+.debug-currency-button {
+    margin-left: 16px;
+    height: 26px;
+    font-size: 12px;
+    background-color: rgb(120, 60, 60);
+    color: rgb(255, 220, 220);
+}
+
 .main-row {
     flex-direction: row;
     flex-grow: 1;
