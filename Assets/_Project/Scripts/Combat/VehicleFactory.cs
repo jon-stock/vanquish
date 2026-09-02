@@ -93,7 +93,17 @@ namespace Vanquish.Combat
                 fuseRelay.owner = impact;
             }
 
-            BuildVisualCapsule(missile.transform, new Vector3(0.4f, 0.9f, 0.4f));
+            Transform missileVisual = BuildVisualCapsule(missile.transform, new Vector3(0.4f, 0.9f, 0.4f));
+
+            // Dev-visibility pass (Phase 2D): team-colored body + a bright tail engine
+            // glow, since a plain grey 0.4m capsule in flight is otherwise almost
+            // impossible to notice before impact — see PLAN.md's Phase 2D technical
+            // notes for the full writeup on why draw distance felt bad.
+            TeamColorUtility.ApplyTeamColor(missileVisual, team);
+            // Parented to the (unscaled) missile root rather than the capsule visual
+            // itself, so this local offset isn't distorted by the capsule's own
+            // non-uniform scale/rotation.
+            DroneVisualBuilder.AddEngineGlow(missile.transform, new Vector3(0f, 0f, -0.9f), TeamColorUtility.GetColor(team));
 
             return missile;
         }
@@ -141,6 +151,15 @@ namespace Vanquish.Combat
             signature.radarCrossSection = stats.radarCrossSection;
             signature.infraredSignature = stats.infraredSignature;
             signature.team = team;
+            // Phase 2D: baked in here (rather than left for a caller to probe via
+            // GetComponent<WeaponController>()) so any AI archetype can cheaply tell
+            // an armed strike drone apart from an unarmed scout straight off the
+            // DetectableSignature it already gets from TeamAwareness/DetectionSensor.
+            signature.isArmed = loadout.missileLoadout != null && loadout.missileLoadout.IsComplete;
+            // Phase 2D: same idea for the Scout-hunter archetype — a "scout" is
+            // whatever the design's own sensor suite says it is (sharesContactsWithTeam),
+            // not a separate role flag that could drift out of sync with the part data.
+            signature.isScout = loadout.sensorSuite != null && loadout.sensorSuite.sharesContactsWithTeam;
 
             var sensor = drone.AddComponent<DetectionSensor>();
             sensor.baseRangeMeters = stats.sensorRangeMeters;
@@ -180,6 +199,14 @@ namespace Vanquish.Combat
                 ? DroneVisualBuilder.BuildMultirotorVisual(drone.transform, loadout.airframe.rotorCount)
                 : DroneVisualBuilder.BuildFixedWingVisual(drone.transform);
 
+            // Dev-visibility pass (Phase 2D): team-colored materials instead of default
+            // grey, plus an engine glow on fixed-wing/jet drones specifically (their
+            // constant forward thrust is otherwise invisible — multirotors already have
+            // spinning rotors as their visual tell, so they're skipped here).
+            TeamColorUtility.ApplyTeamColor(visual, team);
+            if (!isMultirotor && stats.requiresForwardFlight)
+                DroneVisualBuilder.AddEngineGlow(visual, new Vector3(0f, 0f, -0.75f), TeamColorUtility.GetColor(team));
+
             if (isMultirotor)
             {
                 var tilt = drone.AddComponent<QuadcopterTiltVisual>();
@@ -193,7 +220,7 @@ namespace Vanquish.Combat
             return drone;
         }
 
-        private static void BuildVisualCapsule(Transform parent, Vector3 scale)
+        private static Transform BuildVisualCapsule(Transform parent, Vector3 scale)
         {
             GameObject visual = GameObject.CreatePrimitive(PrimitiveType.Capsule);
             visual.name = "Visual";
@@ -201,6 +228,7 @@ namespace Vanquish.Combat
             visual.transform.SetParent(parent, worldPositionStays: false);
             visual.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
             visual.transform.localScale = scale;
+            return visual.transform;
         }
 
         /// <summary>

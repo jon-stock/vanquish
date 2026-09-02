@@ -124,6 +124,45 @@ namespace Vanquish.Combat
             blade.transform.localScale = new Vector3(armLength * 0.55f, 0.01f, 0.05f);
         }
 
+        /// <summary>
+        /// Dev-visibility pass (Phase 2D): a small bright emissive core (plus a
+        /// matching Light for actual scene illumination, not just an unlit-looking
+        /// bright material) at a thrusting unit's engine position — missiles and
+        /// fixed-wing/jet drones, not multirotors (their rotors are already the visual
+        /// tell). Without this, a launched missile is a dim 0.4m-wide grey capsule with
+        /// nothing to catch the eye before it's already close — see PLAN.md's Phase 2D
+        /// technical notes for the full "why draw distance felt bad" writeup. No art
+        /// assets: a scaled-down sphere primitive with its collider stripped, same
+        /// "primitives for now" convention as the rest of this class.
+        /// </summary>
+        public static void AddEngineGlow(Transform parent, Vector3 localPosition, Color color, float coreScale = 0.18f)
+        {
+            GameObject core = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            core.name = "EngineGlow";
+            DestroyCollider(core);
+            core.transform.SetParent(parent, worldPositionStays: false);
+            core.transform.localPosition = localPosition;
+            core.transform.localScale = Vector3.one * coreScale;
+
+            var renderer = core.GetComponent<Renderer>();
+            Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null)
+                shader = Shader.Find("Standard");
+            var material = new Material(shader) { color = color };
+            if (material.HasProperty("_EmissionColor"))
+            {
+                material.EnableKeyword("_EMISSION");
+                material.SetColor("_EmissionColor", color * 2.5f); // well above 1.0 so it visually pops even in daylight
+            }
+            renderer.sharedMaterial = material;
+
+            var glowLight = core.AddComponent<Light>();
+            glowLight.type = LightType.Point;
+            glowLight.color = color;
+            glowLight.range = 12f;
+            glowLight.intensity = 3f;
+        }
+
         private static void DestroyCollider(GameObject go)
         {
             var collider = go.GetComponent<Collider>();

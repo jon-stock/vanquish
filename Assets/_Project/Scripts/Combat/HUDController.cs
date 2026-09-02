@@ -27,8 +27,17 @@ namespace Vanquish.Combat
         public float radarRangeMeters = 1000f;
         public float radarBoxSize = 220f;
 
+        [Tooltip("Dev-visibility pass (Phase 2D): known enemy contacts farther than this " +
+            "get an on-screen diamond marker + distance readout drawn over their actual " +
+            "world position, since the prototype primitive models are too small to " +
+            "reliably spot in the 3D view at real combat distances on their own — see " +
+            "PLAN.md's Phase 2D technical notes. Contacts closer than this are left " +
+            "unmarked since the real model should already be visible by then.")]
+        public float distantMarkerMinDistanceMeters = 150f;
+
         private GUIStyle _labelStyle;
         private GUIStyle _resultStyle;
+        private GUIStyle _markerLabelStyle;
         private Rigidbody _playerRigidbody;
 
         private void Start()
@@ -41,11 +50,13 @@ namespace Vanquish.Combat
         {
             _labelStyle ??= new GUIStyle(GUI.skin.label) { fontSize = 18, normal = { textColor = Color.white } };
             _resultStyle ??= new GUIStyle(GUI.skin.label) { fontSize = 36, normal = { textColor = Color.yellow }, alignment = TextAnchor.MiddleCenter };
+            _markerLabelStyle ??= new GUIStyle(GUI.skin.label) { fontSize = 12, normal = { textColor = Color.red }, alignment = TextAnchor.UpperCenter };
 
             DrawStatusPanel();
             DrawFlightPanel();
             DrawArtificialHorizon();
             DrawRadar();
+            DrawDistantContactMarkers();
             DrawCombatResult();
         }
 
@@ -207,6 +218,51 @@ namespace Vanquish.Combat
 
                 DrawDot(dotPos, Color.red, 5f);
             }
+        }
+
+        /// <summary>
+        /// Dev-visibility pass (Phase 2D): unlike DrawRadar (a fixed heading-relative
+        /// mini-map in the corner, range-limited to radarRangeMeters), this overlays a
+        /// marker directly on top of each known enemy's actual on-screen position in
+        /// the 3D view — the thing actually missing before, since the corner radar
+        /// tells you *that* something exists but not *where to look* in front of you.
+        /// Only off-screen-vs-on-screen is handled (contacts behind/outside the camera
+        /// frustum are skipped); an edge-of-screen directional indicator for contacts
+        /// currently out of view is a natural follow-up but out of scope for this pass.
+        /// </summary>
+        private void DrawDistantContactMarkers()
+        {
+            if (player == null || TeamAwareness.Instance == null || Camera.main == null)
+                return;
+
+            Camera cam = Camera.main;
+            foreach (var contact in TeamAwareness.Instance.GetKnownEnemies(Team.Player))
+            {
+                if (contact == null)
+                    continue;
+
+                float distance = Vector3.Distance(player.position, contact.Position);
+                if (distance < distantMarkerMinDistanceMeters)
+                    continue; // close enough that the real 3D model should already read fine
+
+                Vector3 viewportPoint = cam.WorldToViewportPoint(contact.Position);
+                if (viewportPoint.z <= 0f)
+                    continue; // behind the camera
+                if (viewportPoint.x < 0f || viewportPoint.x > 1f || viewportPoint.y < 0f || viewportPoint.y > 1f)
+                    continue; // off-screen — see method doc comment
+
+                Vector2 screenPos = new Vector2(viewportPoint.x * Screen.width, (1f - viewportPoint.y) * Screen.height);
+                DrawDiamondMarker(screenPos, Color.red, 10f);
+                GUI.Label(new Rect(screenPos.x - 40f, screenPos.y + 8f, 80f, 20f), $"{distance:F0}m", _markerLabelStyle);
+            }
+        }
+
+        private void DrawDiamondMarker(Vector2 center, Color color, float size)
+        {
+            Matrix4x4 previousMatrix = GUI.matrix;
+            GUIUtility.RotateAroundPivot(45f, center);
+            DrawDot(center, color, size);
+            GUI.matrix = previousMatrix;
         }
 
         private void DrawDot(Vector2 position, Color color, float size)

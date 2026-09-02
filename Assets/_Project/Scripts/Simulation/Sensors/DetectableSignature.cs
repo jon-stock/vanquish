@@ -18,6 +18,20 @@ namespace Vanquish.Simulation.Sensors
         [Tooltip("Which side this unit belongs to, used to filter friend/foe in team-aware detection and AI targeting.")]
         public Team team = Team.Enemy;
 
+        [Tooltip("Phase 2D: true for units that can actually shoot back (a drone with a completed " +
+            "WeaponBay+MissileLoadout, baked in at spawn time by VehicleFactory), false for unarmed " +
+            "support units like scout drones. Lets role-aware AI archetypes (e.g. Interceptor) tell " +
+            "'the player's strike drone' apart from any other same-team contact instead of only ever " +
+            "chasing whichever contact happens to be nearest.")]
+        public bool isArmed;
+
+        [Tooltip("Phase 2D: true for units whose sensor suite shares contacts with its whole team " +
+            "(SensorSuiteDefinition.sharesContactsWithTeam, baked in at spawn time by VehicleFactory) — " +
+            "i.e. a scout. Lets role-aware AI archetypes (e.g. Scout-hunter) prioritize killing the unit " +
+            "that's blinding-by-proxy the rest of its team's TeamAwareness, rather than just chasing " +
+            "whichever contact happens to be nearest.")]
+        public bool isScout;
+
         public Vector3 Position => transform.position;
         float IDetectable.RadarCrossSection => radarCrossSection;
         float IDetectable.InfraredSignature => infraredSignature;

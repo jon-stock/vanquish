@@ -32,7 +32,18 @@ namespace Vanquish.EditorTools
         [MenuItem("Vanquish/Phase 1/Run Headless Combat Test")]
         public static void RunHeadlessTest()
         {
-            EditorSceneManager.OpenScene(ScenePath);
+            RunHeadlessTest(ScenePath);
+        }
+
+        /// <summary>
+        /// Same headless Play-mode smoke test, against any scene — added so
+        /// CombatTestSceneBuilder's dynamic multi-archetype test scenes get the same
+        /// "does it actually run without exceptions" regression check as the fixed
+        /// Phase 1 MVP arena, instead of every new test scene needing its own runner.
+        /// </summary>
+        public static void RunHeadlessTest(string scenePath)
+        {
+            EditorSceneManager.OpenScene(scenePath);
             SessionState.SetBool(RunningKey, true);
             SessionState.SetFloat(StartTimeKey, (float)EditorApplication.timeSinceStartup);
             EditorApplication.update += Tick;

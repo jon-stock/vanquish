@@ -571,34 +571,223 @@ headless jamming-multiplier and decoy-roll checks above; both are live in
 #### 2D — AI Depth
 **Goal:** CPU opponents stop being a single patrol→engage FSM and start having distinct roles.
 
-- [ ] **Interceptor** archetype: aggressive, prioritizes closing distance and engaging
-  the player's strike drone specifically (today's `EnemyDroneAI` is close to this
-  already — formalize it as one archetype rather than "the" AI).
-- [ ] **Scout-hunter** archetype: prioritizes targeting known/likely scout drones
-  first (since killing the scout blinds the player's TeamAwareness) — needs
-  `TeamAwareness` to expose "is this contact a scout" (e.g. via
-  `SensorSuiteDefinition.sharesContactsWithTeam` on the spawned unit) so the AI can
-  discriminate targets, not just "nearest."
-- [ ] **SAM site** archetype: static (or minimally-mobile) `BaseDefenseDefinition`-driven
+- [x] **Interceptor** archetype: aggressive, prioritizes closing distance and engaging
+  the player's strike drone specifically. Formalized the Phase 1 `EnemyDroneAI` into
+  `InterceptorAI` — moved from `Scripts/Combat/` into `Scripts/AI/` (the "CPU opponent
+  behavior" folder `docs/CODING_STANDARDS.md` always described but never had content
+  in, namespace `Vanquish.AI`); patrol/pursuit steering itself is unchanged (per this
+  item's own note that `EnemyDroneAI` was already "close to this"). The one
+  substantive behavior change: target *selection* now specifically prefers "the
+  player's strike drone" instead of whichever contact is merely nearest. Added
+  `DetectableSignature.isArmed` (baked in by `VehicleFactory.SpawnDrone` from
+  `loadout.missileLoadout?.IsComplete`, so any role-aware AI can tell an armed strike
+  drone apart from an unarmed scout without a `GetComponent<WeaponController>()` probe)
+  and a new `armedOnly` parameter on `TeamAwareness.GetNearestKnownEnemy` (backed by a
+  new pure `TeamAwareness.SelectNearest` helper, factored out specifically for headless
+  testing). `InterceptorAI.AcquireTarget` queries `armedOnly: true` first and only
+  falls back to any known contact if no armed one is known yet — so it isn't
+  permanently inert if only a lone scout is in the fight. This is a real,
+  previously-latent bug fix, not just a rename: in the existing Phase 1 arena the
+  scout drone spawns fractionally closer to the enemy's spawn point than the strike
+  drone it's escorting, so plain nearest-contact selection could have the enemy AI
+  fixate on the harmless scout instead of the armed strike drone — exactly the gap
+  this PLAN.md item called out. **Follow-up refactor** (done alongside the
+  Scout-hunter item below, once a second nearly-identical archetype made the
+  duplication concrete): the patrol/steer/fire loop was factored out of `InterceptorAI`
+  into a shared abstract `DroneCombatAI` base (`enum PatrolEngageState`, was
+  `InterceptorState`) so each archetype subclass only implements its own
+  `AcquireTarget()` targeting policy — still separate MonoBehaviour types per archetype
+  (per this sub-milestone's own technical note against "one mega-controller with
+  branching modes"), just without re-typing identical boilerplate per archetype.
+  Verified headlessly via new `Phase2DValidation.ValidateInterceptorArmedTargetPriority`:
+  reproduced the scout-closer-than-strike-drone arrangement with disposable
+  `DetectableSignature` GameObjects — confirmed plain nearest-contact selection would
+  pick the closer unarmed scout, confirmed `armedOnly` selection correctly picks the
+  (more distant) armed strike drone instead, and confirmed `armedOnly` selection
+  returns `null` (not a wrong answer) when no armed contact is known at all, so the
+  fallback path has a real reason to run — all PASS. Also re-ran
+  `Phase1CombatSceneBuilder.BuildScene` headlessly (regenerates `Combat_Arena01.unity`
+  against the new `InterceptorAI` type/GUID since the old `EnemyDroneAI.cs`/`.meta`
+  were deleted as part of the move) with no missing-asset errors, and a full
+  60-second `Phase1BatchRunner` headless Play-mode regression with no
+  exceptions/missing-script errors — re-run again after the `DroneCombatAI` extraction
+  to confirm the refactor didn't change live behavior.
+- [x] **Scout-hunter** archetype: prioritizes targeting known/likely scout drones
+  first (since killing the scout blinds the player's TeamAwareness). Added
+  `ScoutHunterAI : DroneCombatAI` alongside `InterceptorAI` (see the refactor above —
+  both now share the same patrol/steer/fire loop, differing only in `AcquireTarget()`).
+  Role discrimination uses exactly the mechanism this item itself suggested:
+  `DetectableSignature.isScout`, baked in by `VehicleFactory.SpawnDrone` from
+  `SensorSuiteDefinition.sharesContactsWithTeam` (confirmed against the actual seeded
+  assets: `Sensor_Basic.sharesContactsWithTeam = false`, `Sensor_Scout.
+  sharesContactsWithTeam = true` — the flag genuinely discriminates strike vs. scout
+  drones in real data, not just in theory). Added `TeamAwareness.
+  GetNearestKnownScoutEnemy` alongside a generalized `TeamAwareness.SelectNearest`
+  (now takes a `Func<DetectableSignature, bool>` role filter instead of a single
+  `armedOnly` bool, so both Interceptor's armed-preference and Scout-hunter's
+  scout-preference share one selection function rather than diverging bespoke copies).
+  `ScoutHunterAI.AcquireTarget` prefers the nearest known scout, falling back to any
+  known contact if no scout is known yet — mirrors Interceptor's own
+  no-armed-contact-known fallback, so this archetype isn't inert against an opposing
+  team with no scout. Verified headlessly via new `Phase2DValidation.
+  ValidateScoutHunterScoutTargetPriority`: a scenario with an armed strike drone closer
+  than a scout — confirmed plain nearest-contact selection would (wrongly) pick the
+  strike drone, confirmed scout-priority selection correctly picks the farther-away
+  scout instead, and confirmed scout-only selection returns `null` when no scout is
+  known, so `ScoutHunterAI`'s fallback path has a real reason to run — all PASS.
+  Re-ran `Phase1CombatSceneBuilder.BuildScene` and a full 60-second `Phase1BatchRunner`
+  headless Play-mode regression (both unaffected by this item, since neither
+  `ScoutHunterAI` nor a second enemy archetype is wired into the Phase 1 MVP arena yet
+  — deliberately deferred: the MVP scene's win condition/HUD assume a single enemy
+  drone, and this sub-milestone's own exit criteria expects interceptor + scout-hunter +
+  SAM site to be demonstrated together once the SAM site item below also lands, not
+  wired in piecemeal against the existing single-enemy arena) — no exceptions/
+  missing-script errors, confirming the refactor and new type didn't regress anything.
+- [x] **SAM site** archetype: static (or minimally-mobile) `BaseDefenseDefinition`-driven
   unit with a fixed position, long engagement range, high rate of fire — needs its own
   spawner path (not `VehicleFactory.SpawnDrone`, since it's not a drone) and a simple
-  "engage anything in range" controller rather than patrol/pursuit logic.
-- [ ] Replace/augment the current hand-rolled FSM (`EnemyAIState` enum + `if`/`else` in
-  `EnemyDroneAI`) with actual behavior trees once there are 3+ archetypes sharing
-  building blocks (detect, evade, engage, retreat-when-low-health) — evaluate Unity's
-  Behavior package (per the original tech stack notes) vs. continuing hand-rolled FSMs;
-  don't adopt a framework speculatively, decide once the archetype count makes shared
-  nodes clearly worth it.
+  "engage anything in range" controller rather than patrol/pursuit logic. Added
+  `InstallationFactory.SpawnBaseDefense` as a sibling static class to `VehicleFactory`
+  (not a new `VehicleFactory` method) — per this item's own instruction and PLAN.md's
+  independently-arrived-at 2F design intent ("placed installations need their own
+  spawner, parallel to `VehicleFactory`, since they're static/semi-static"). It skips
+  everything flight-specific (`Rigidbody`, `FlightBody`, `orientToVelocity`,
+  `CrashDamage`) that `VehicleFactory.SpawnDrone` does, but reuses
+  `DetectableSignature`/`DetectionSensor`/`Health`/`WeaponController` verbatim —
+  confirmed beforehand that none of those four are actually drone-coupled (in
+  particular, `WeaponController` only needs a `MissileLoadout` + `transform` + optional
+  sibling `Collider`, nothing drone-specific). `SamSiteAI` (`Scripts/AI/`) is the
+  "engage anything in range" controller: deliberately does **not** extend
+  `DroneCombatAI` (which requires a `FlightBody`/`Rigidbody` and implements a
+  patrol↔engage steering loop this unit has no use for) — it's a plain
+  `MonoBehaviour` that finds the nearest known enemy of its own team each tick and
+  fires if within `engagementRangeMeters`, no movement/steering/patrol point at all,
+  the simplest archetype in the project by design. `BaseDefenseDefinition` gained a
+  `missileLoadout` (`MissileLoadout`, embedded directly on the definition since a SAM
+  site has no airframe/propulsion/sensor-suite of its own to assemble one around, per
+  2F's later Workshop-placement flow not existing yet) and `ammoCount` field.
+  `Phase2DSamSiteSeeder` seeds one real asset, `BaseDefense_SamSite_Basic` (long
+  1500m engagement range and 1 shot/second — both well beyond a drone's typical
+  250-400m engage range / 2.5s cooldown, per this item's own "long engagement range,
+  high rate of fire" description — reusing the same Tier-0 missile parts as
+  Phase1CombatSceneBuilder's "Basic Missile" rather than seeding new dedicated SAM
+  missile parts, since this item is about the site/AI/spawner existing and behaving
+  correctly, not new missile part breadth). Not yet wired into any tech tree/Workshop
+  placement flow — that's Phase 2F's job; currently only consumed by
+  `InstallationFactory`/`CombatTestSceneBuilder`. Wired into the dev-testing tool
+  (`CombatTestSceneBuilder`/`CombatTestSceneBuilderWindow`) as a new `TestArchetype.
+  SamSite` case — required restructuring `SpawnEnemyRoster`'s per-slot spawn call
+  (previously always `VehicleFactory.SpawnDrone`) to branch between the drone spawn
+  path and `InstallationFactory.SpawnBaseDefense`, exactly the "won't just be one
+  switch case" caveat the tool's own doc comment already flagged. The window's
+  "Armed" toggle is correctly disabled/ignored for `SamSite` groups (always armed via
+  its own `BaseDefenseDefinition.missileLoadout`, not the drone strike/scout loadout
+  toggle); the "Fire Cooldown" override still applies uniformly regardless of
+  archetype. `BuildDefaultMultiArchetypeTestScene` now spawns all three combat
+  archetypes together (1 Interceptor + 1 Scout-hunter + 1 unarmed bait scout + 1 SAM
+  site) — directly demonstrating this sub-milestone's exit criteria. Verified
+  headlessly: `Phase2DValidation.ValidateSamSiteDefinitionAsset` confirms the seeded
+  asset exists with a complete missile loadout and positive
+  engagement-range/fire-rate/health/ammo (ALL PASS); rebuilt the multi-archetype test
+  scene and ran a full 60-second headless Play-mode battle with no exceptions/
+  missing-script errors, with the console log confirming `Enemy_SamSite_*` actually
+  fires — and at exactly the intended 1.0s cadence (`t=0.0s, 1.0s, 2.0s, 3.0s...`) once
+  the demo composition's fire-rate override was set to match `BaseDefense_SamSite_
+  Basic.rateOfFirePerSecond` rather than the tool's generic default; re-confirmed the
+  original fixed MVP arena still builds cleanly, unaffected.
+- [ ] Replace/augment the current hand-rolled FSM (`PatrolEngageState` enum + `if`/`else`
+  in the shared `DroneCombatAI` base that `InterceptorAI`/`ScoutHunterAI` both extend,
+  per the archetype items above) with actual behavior trees once there are 3+
+  archetypes sharing building blocks (detect, evade, engage, retreat-when-low-health) —
+  evaluate Unity's Behavior package (per the original tech stack notes) vs. continuing
+  hand-rolled FSMs; don't adopt a framework speculatively, decide once the archetype
+  count makes shared nodes clearly worth it.
 - [ ] AI should react to being jammed/detected-by-countermeasure (from 2C) — e.g. break
   off or use its own countermeasures — otherwise 2C's systems are invisible to the AI
   side of the fight.
 
 **Technical notes:** Keep archetypes as separate MonoBehaviours (like today's
-`EnemyDroneAI`/`ScoutPatrol` split) rather than one mega-controller with branching
-modes — matches the existing pattern and keeps each headlessly testable in isolation.
+`InterceptorAI`/`ScoutHunterAI`/`ScoutPatrol` split) rather than one mega-controller
+with branching modes — matches the existing pattern and keeps each headlessly testable
+in isolation. `InterceptorAI`/`ScoutHunterAI` do now share a common `DroneCombatAI`
+base for their identical patrol/steer/fire plumbing (added once the Scout-hunter item
+made that duplication concrete), but each remains its own concrete subclass overriding
+only its targeting policy — not a single class branching on an archetype enum.
+
+**Dev-testing infrastructure added alongside this sub-milestone** (not a PLAN.md
+checklist item itself, but worth recording since it's now the answer to "how do I
+test the next AI feature live"): the Workshop → Combat flow only ever built one fixed
+arena (`Phase1CombatSceneBuilder`, one hardcoded enemy), so a new archetype like
+Scout-hunter had no way to be exercised visually without hand-editing scene-building
+code. Added `CombatTestSceneBuilder`/`EnemySpawnGroup`/`TestArchetype` (reusing
+`Phase1CombatSceneBuilder`'s loadout-loading/scene-boilerplate helpers, now `internal`
+instead of `private` so they can be shared) to build a combat scene from an arbitrary,
+caller-specified enemy roster — any mix/count of archetypes — saved to a separate
+`Combat_TestArena.unity` so it never collides with the fixed MVP arena
+`Phase1BatchRunner` regression-tests. `CombatTestSceneBuilderWindow` is the interactive
+`Vanquish/Debug/Combat Test Scene Builder` menu: add/remove enemy groups, pick each
+group's archetype/armed-or-unarmed/count, then "Build Test Scene" or "Build & Enter
+Play Mode" — no code changes needed to test a new mix. `Phase1BatchRunner`'s headless
+Play-mode smoke test was generalized to accept any scene path (was hardcoded to the
+MVP arena) so this tool's scenes get the same "does it actually run without
+exceptions" regression check. Every future drone-based archetype just needs one
+`case` added to `CombatTestSceneBuilder`'s spawn switch to show up in this tool too —
+though the SAM site item below turned out to need slightly more than "just a case"
+(see its own writeup) since it isn't a drone at all.
+Verified headlessly: `Vanquish/Phase 2D/Build Default Multi-Archetype Test Scene
+(Headless)` (1 Interceptor + 1 Scout-hunter + 1 unarmed bait scout) builds with no
+missing-asset errors, and a full 60-second headless Play-mode run against that scene
+completes with no exceptions/missing-script errors; re-confirmed
+`Phase1CombatSceneBuilder.BuildScene` (the original fixed MVP arena) still builds
+cleanly after the shared-helper access-modifier changes.
+
+**Follow-up to the dev-testing tool above**: `EnemySpawnGroup` gained a
+`fireCooldownSeconds` field (exposed in `CombatTestSceneBuilderWindow` as a per-group
+"Fire Cooldown (s/shot)" field, disabled when a group is unarmed), applied post-spawn
+via `WeaponController.fireCooldownSeconds` — so testing "what if the enemy fires twice
+as fast" no longer needs a code/data change, just a field in the window.
+
+**Dev-visibility pass** (also raised during manual testing of the tool above — real
+combat/AI behavior was correct, but essentially invisible until impact): diagnosed as
+not actually a draw-distance/clipping problem (camera far clip was already 3000m,
+fog was already off) but a *conspicuity* problem — the prototype primitives
+(`DroneVisualBuilder`'s ~2m drone, `VehicleFactory`'s 0.4m missile capsule) are too
+small and too plain-grey to read against the sky/ground at real engagement distances,
+with nothing marking a launched missile as "look here" before it's already close.
+Fixed with four changes: (1) `TeamColorUtility` — bright red enemy / blue player
+materials (with a slight emissive tint for shadow readability) applied to every drone
+and missile instead of Unity's default grey; (2) `DroneVisualBuilder.AddEngineGlow` —
+a small bright emissive core + point light at the tail of every missile and every
+fixed-wing/jet drone (multirotors already have visible spinning rotors as their "it's
+moving" cue, so skipped); (3) `HUDController.DrawDistantContactMarkers` — a red diamond
++ distance readout drawn directly over a known enemy contact's actual on-screen
+position once it's farther than `distantMarkerMinDistanceMeters` (150m default),
+complementing (not replacing) the existing corner mini-radar, which tells you *that*
+something's out there but not *where to look* in the 3D view; off-screen contacts are
+skipped for now (an edge-of-screen directional arrow is a natural follow-up, out of
+scope for this pass). (4) Headroom bump: camera far clip `3000f → 12000f` (covers
+`Seeker_MultiSpectral`'s 9000m detection range plus margin) and explicit
+`RenderSettings.fog = false` / `fogEndDistance = 10000f` in `Phase1CombatSceneBuilder.
+BuildLight` — previously each new scene silently inherited Unity's new-scene fog
+defaults (off, but with a 300m end distance baked in), a landmine for whoever first
+enabled fog without noticing it'd cut off well inside seeder range. `CombatTestSceneBuilder`
+inherits both automatically since it reuses `BuildCamera`/`BuildLight`. Verified
+headlessly (rebuild of both the MVP arena and the multi-archetype test scene, plus a
+60-second Play-mode regression, all with no compile/runtime errors) and confirmed live
+by manual playtesting — distant contacts are now visible via the marker well before a
+missile is close enough to be a threat.
 
 **Exit criteria:** A single battle can contain an interceptor, a scout-hunter, and a
-SAM site simultaneously, each behaving visibly differently.
+SAM site simultaneously, each behaving visibly differently (✅ — all three now exist
+and are demonstrated together via `CombatTestSceneBuilder.
+BuildDefaultMultiArchetypeTestScene`/`Vanquish/Debug/Combat Test Scene Builder`: the
+Interceptor beelines for the armed strike drone specifically, the Scout-hunter
+diverts for the unarmed scout even when a closer strike drone is available, and the
+static SAM site never moves but engages anything within its long 1500m range at a
+fast, fixed 1s cadence — visibly distinct behaviors confirmed via headless Play-mode
+regression and manual playtesting. The remaining two checklist items above — behavior
+trees and AI reacting to jamming/countermeasures — are follow-on depth work, not
+required for this exit criterion, and remain unchecked/deferred).
 
 ---
 
@@ -876,7 +1065,7 @@ Expand the simulation from single-craft tactical engagements into full-spectrum 
   deep-dive before implementation starts, the same way 2A-2G did.
 - **Behavior-tree package maturity**: if 2D adopts Unity's `com.unity.behavior` package,
   confirm it's stable/out of preview for the project's Unity version before committing —
-  the existing hand-rolled FSM (`EnemyDroneAI`) is a perfectly viable permanent choice
+  the existing hand-rolled FSM (`InterceptorAI`) is a perfectly viable permanent choice
   for AI this simple if the package isn't mature enough yet.
 - **Multiplayer readiness debt (informational, not a v1.0 blocker)**: client-authoritative
   `FlightBody` physics, brute-force `FindObjectsByType` scans, and the singleton

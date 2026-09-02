@@ -10,7 +10,7 @@ namespace Vanquish.Simulation.Flight
     /// current scene builder uses, per this class's own technical note in PLAN.md,
     /// until Phase 2E's real terrain exists). Applies its correction as a vertical
     /// steering force through FlightBody.ApplySteering — the same force-application
-    /// path player input (PlayerDroneController) and AI guidance (EnemyDroneAI) already
+    /// path player input (PlayerDroneController) and AI guidance (InterceptorAI) already
     /// use — clamped to maxClimbRateMetersPerSecond so a large altitude error doesn't
     /// snap the craft upward instantly.
     ///

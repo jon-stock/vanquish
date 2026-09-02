@@ -2,6 +2,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using Vanquish.AI;
 using Vanquish.Combat;
 using Vanquish.Core;
 using Vanquish.Data.Drones;
@@ -14,8 +15,9 @@ namespace Vanquish.EditorTools
     /// Builds the Phase 1 MVP combat arena programmatically (see the headless testing
     /// workflow in docs/CODING_STANDARDS.md): one player drone (manually controlled),
     /// one scout drone (long-range detection, feeds TeamAwareness), one enemy drone
-    /// (patrol → engage AI), ground, lighting, camera, HUD, and win/lose tracking via
-    /// CombatManager. Requires Phase1DataSeeder to have been run first.
+    /// (Phase 2D's Interceptor archetype: patrol → engage), ground, lighting, camera,
+    /// HUD, and win/lose tracking via CombatManager. Requires Phase1DataSeeder to have
+    /// been run first.
     /// </summary>
     public static class Phase1CombatSceneBuilder
     {
@@ -77,9 +79,11 @@ namespace Vanquish.EditorTools
 
             GameObject enemy = VehicleFactory.SpawnDrone(strikeLoadout, new Vector3(0f, 5f, 200f), Quaternion.Euler(0f, 180f, 0f), Team.Enemy);
             enemy.name = "Enemy_Drone";
-            var enemyAI = enemy.AddComponent<EnemyDroneAI>();
-            enemyAI.arenaCenter = new Vector3(0f, 5f, 0f);
-            enemyAI.patrolRadius = 250f;
+            // Phase 2D: the Phase 1 "patrol -> engage" AI is now formalized as the
+            // Interceptor archetype (Vanquish.AI.InterceptorAI) rather than "the" enemy AI.
+            var interceptor = enemy.AddComponent<InterceptorAI>();
+            interceptor.arenaCenter = new Vector3(0f, 5f, 0f);
+            interceptor.patrolRadius = 250f;
 
             BuildCamera(player.transform);
             BuildHud(player, playerController);
@@ -90,7 +94,10 @@ namespace Vanquish.EditorTools
             Debug.Log($"[Phase1CombatSceneBuilder] Scene built and saved to {ScenePath}");
         }
 
-        private static MissileLoadout LoadMissileLoadout()
+        // internal (not private) below: reused by CombatTestSceneBuilder so the
+        // dynamic multi-archetype test scene builder doesn't duplicate loadout-loading
+        // and scene-boilerplate code that has nothing to do with enemy composition.
+        internal static MissileLoadout LoadMissileLoadout()
         {
             var loadout = new MissileLoadout { designName = "Basic Missile" };
             loadout.airframe = Load<MissileAirframeDefinition>("Assets/_Project/Data/Missiles/Airframe_Basic.asset");
@@ -101,7 +108,7 @@ namespace Vanquish.EditorTools
             return loadout.IsComplete ? loadout : null;
         }
 
-        private static DroneLoadout LoadStrikeDroneLoadout(MissileLoadout missileLoadout)
+        internal static DroneLoadout LoadStrikeDroneLoadout(MissileLoadout missileLoadout)
         {
             var loadout = new DroneLoadout { designName = "Basic Strike Drone" };
             loadout.propulsion = Load<PropulsionDefinition>("Assets/_Project/Data/Drones/Propulsion_Electric_Basic.asset");
@@ -117,7 +124,7 @@ namespace Vanquish.EditorTools
             return loadout.IsComplete ? loadout : null;
         }
 
-        private static DroneLoadout LoadScoutDroneLoadout()
+        internal static DroneLoadout LoadScoutDroneLoadout()
         {
             var loadout = new DroneLoadout { designName = "Basic Scout Drone" };
             loadout.propulsion = Load<PropulsionDefinition>("Assets/_Project/Data/Drones/Propulsion_Electric_Basic.asset");
@@ -133,7 +140,7 @@ namespace Vanquish.EditorTools
             return loadout.IsComplete ? loadout : null;
         }
 
-        private static T Load<T>(string path) where T : UnityEngine.Object
+        internal static T Load<T>(string path) where T : UnityEngine.Object
         {
             var asset = AssetDatabase.LoadAssetAtPath<T>(path);
             if (asset == null)
@@ -141,7 +148,7 @@ namespace Vanquish.EditorTools
             return asset;
         }
 
-        private static void BuildGround()
+        internal static void BuildGround()
         {
             GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
             ground.name = "Ground";
@@ -187,20 +194,33 @@ namespace Vanquish.EditorTools
             return texture;
         }
 
-        private static void BuildLight()
+        internal static void BuildLight()
         {
             var lightGo = new GameObject("Directional Light");
             var light = lightGo.AddComponent<Light>();
             light.type = LightType.Directional;
             lightGo.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+
+            // Dev-visibility pass (Phase 2D): explicitly assert fog is off with a
+            // generous fallback end distance, rather than relying on whatever
+            // EditorSceneManager.NewScene happens to default RenderSettings to (which
+            // is currently off, but with fogEndDistance=300 baked in — a landmine for
+            // anyone who later enables fog without noticing it'd cut off well inside
+            // the seeker ranges some parts already have, e.g. Seeker_ARH's 8000m).
+            RenderSettings.fog = false;
+            RenderSettings.fogEndDistance = 10000f;
         }
 
-        private static void BuildCamera(Transform followTarget)
+        internal static void BuildCamera(Transform followTarget)
         {
             var camGo = new GameObject("Main Camera");
             camGo.tag = "MainCamera";
             var cam = camGo.AddComponent<Camera>();
-            cam.farClipPlane = 3000f;
+            // Dev-visibility pass (Phase 2D): headroom for the longest seeker range
+            // currently seeded (Seeker_MultiSpectral, 9000m) plus margin, not just the
+            // ~600x600m Phase 1 arena — was 3000f, which would have started clipping
+            // long-range engagements before they were even visually spottable.
+            cam.farClipPlane = 12000f;
             camGo.AddComponent<AudioListener>();
 
             camGo.transform.position = followTarget.position + new Vector3(0f, 60f, -40f);
@@ -213,7 +233,7 @@ namespace Vanquish.EditorTools
             chaseCam.distancePadding = 20f;
         }
 
-        private static void BuildHud(GameObject player, PlayerDroneController controller)
+        internal static void BuildHud(GameObject player, PlayerDroneController controller)
         {
             var hudGo = new GameObject("HUD");
             var hud = hudGo.AddComponent<HUDController>();

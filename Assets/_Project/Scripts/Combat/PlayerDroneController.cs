@@ -40,7 +40,7 @@ namespace Vanquish.Combat
     ///   direct-yaw input, but that made turns too subtle/momentum-dominated to feel
     ///   responsive under direct player control, and gave no throttle at all — this
     ///   replaces that entirely. AI/missile guidance is unaffected (still uses
-    ///   orientToVelocity — see VehicleFactory/EnemyDroneAI), since only this
+    ///   orientToVelocity — see VehicleFactory/InterceptorAI), since only this
     ///   component ever sets alignVelocityToForward/disables orientToVelocity, and
     ///   only for the player's own drone.
     /// </summary>
