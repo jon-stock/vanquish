@@ -11,6 +11,12 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/_Project/Scenes/Combat_Arena01.unity
     guid: b203796e238c58447b13dac35e9a741b
+  - enabled: 1
+    path: Assets/_Project/Scenes/Combat_Arena_Valley.unity
+    guid: 70db00103a21cef4b888d6229fc9026c
+  - enabled: 1
+    path: Assets/_Project/Scenes/Combat_Arena_Plateau.unity
+    guid: d019a954ab9e6f045ba225d24ebc7257
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   m_UseUCBPForAssetBundles: 0

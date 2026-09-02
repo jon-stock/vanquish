@@ -6,6 +6,7 @@ using UnityEngine.UIElements;
 using Vanquish.Core;
 using Vanquish.Data.Drones;
 using Vanquish.Data.Missiles;
+using Vanquish.Data.Scenarios;
 using Vanquish.Data.Shared;
 using Vanquish.Data.Support;
 using Vanquish.Data.TechTree;
@@ -65,6 +66,21 @@ namespace Vanquish.EditorTools
 
             var workshop = workshopGo.AddComponent<WorkshopController>();
             workshop.combatSceneName = "Combat_Arena01";
+
+            // Phase 2E: "scenario selection needs a place to live" — a small OnGUI
+            // picker overlay listing every seeded ScenarioDefinition (see
+            // ScenarioPickerOverlay's own doc comment for why OnGUI rather than a
+            // Workshop.uxml addition). Missing/unseeded assets are logged, not fatal —
+            // an older/partial data-seed state just means the overlay renders nothing
+            // and Enter Combat falls back to combatSceneName above, same as before 2E.
+            var scenarioPickerGo = new GameObject("ScenarioPickerOverlay");
+            var scenarioPicker = scenarioPickerGo.AddComponent<ScenarioPickerOverlay>();
+            scenarioPicker.scenarios = new[]
+            {
+                Load<ScenarioDefinition>("Assets/_Project/Data/Scenarios/Scenario_TierZeroSkirmish.asset"),
+                Load<ScenarioDefinition>("Assets/_Project/Data/Scenarios/Scenario_ValleyInterdiction.asset"),
+                Load<ScenarioDefinition>("Assets/_Project/Data/Scenarios/Scenario_PlateauSkirmish.asset"),
+            };
 
             workshop.techTree = new[]
             {

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Vanquish.Data;
 using Vanquish.Data.Drones;
+using Vanquish.Data.Scenarios;
 using Vanquish.Data.TechTree;
 
 namespace Vanquish.Core
@@ -37,6 +38,16 @@ namespace Vanquish.Core
         /// </summary>
         public DroneLoadout PendingStrikeDroneLoadout { get; set; }
         public DroneLoadout PendingScoutDroneLoadout { get; set; }
+
+        /// <summary>
+        /// Phase 2E: which scenario the player picked via ScenarioPickerOverlay in the
+        /// Workshop scene, if any. Same "in-memory, cross-scene-transient" pattern as
+        /// the loadout fields above — null means "no selection, use WorkshopController.
+        /// combatSceneName's single hardcoded default", which is what keeps
+        /// Combat_Arena01 still reachable/testable without ever visiting a picker
+        /// (e.g. headless batch regression tests).
+        /// </summary>
+        public ScenarioDefinition PendingScenario { get; set; }
 
         private void Awake()
         {

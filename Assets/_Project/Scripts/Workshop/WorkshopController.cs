@@ -510,7 +510,14 @@ namespace Vanquish.Workshop
                     progress.PendingScoutDroneLoadout = scoutLoadout;
             }
 
-            SceneManager.LoadScene(combatSceneName);
+            // Phase 2E: load whichever scenario was picked via ScenarioPickerOverlay,
+            // if any, falling back to the single hardcoded default scene so
+            // Combat_Arena01 stays reachable even when no picker was ever shown (e.g.
+            // headless batch regression tests that never touch the Workshop scene at all).
+            string sceneToLoad = progress != null && progress.PendingScenario != null
+                ? progress.PendingScenario.sceneName
+                : combatSceneName;
+            SceneManager.LoadScene(sceneToLoad);
         }
 
         private bool TryBuildMissileLoadout(PlayerProgress progress, out MissileLoadout loadout)

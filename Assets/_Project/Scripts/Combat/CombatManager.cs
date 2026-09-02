@@ -14,9 +14,23 @@ namespace Vanquish.Combat
     }
 
     /// <summary>
-    /// Tracks win/lose conditions for a combat scene: victory once every enemy Health
-    /// is destroyed, defeat once every player Health is destroyed. Awards currency to
-    /// PlayerProgress on victory. One instance per combat scene.
+    /// Phase 2E: which victory-condition strategy this scene's CombatManager should
+    /// build in Awake — see IObjective's own doc comment for why this is stored as a
+    /// serializable (enum, GameObject reference) pair rather than a live IObjective
+    /// reference directly.
+    /// </summary>
+    public enum ObjectiveType
+    {
+        DestroyAllEnemies,
+        DestroyTarget,
+    }
+
+    /// <summary>
+    /// Tracks win/lose conditions for a combat scene: defeat once every player Health
+    /// is destroyed (universal, every scenario); victory per a pluggable IObjective
+    /// (Phase 2E — was hardcoded "every enemy Health destroyed", now the default of
+    /// two strategies). Awards currency to PlayerProgress on victory. One instance per
+    /// combat scene.
     /// </summary>
     public class CombatManager : MonoBehaviour
     {
@@ -26,14 +40,60 @@ namespace Vanquish.Combat
         public string workshopSceneName = "Workshop";
         public float resultToReturnDelaySeconds = 3f;
 
+        [Header("Objective (Phase 2E)")]
+        public ObjectiveType objectiveType = ObjectiveType.DestroyAllEnemies;
+
+        [Tooltip("Required when objectiveType == DestroyTarget: the specific enemy unit (must have " +
+            "a Health component) that must be destroyed for victory, independent of any other enemy " +
+            "units in the scene. Ignored for DestroyAllEnemies.")]
+        public GameObject objectiveTarget;
+
+        [Tooltip("Player-facing description shown alongside the VICTORY/DEFEAT banner for " +
+            "DestroyTarget objectives. Ignored for DestroyAllEnemies (which has a fixed description).")]
+        public string objectiveTargetDescription = "Destroy the designated target.";
+
         public CombatResult Result { get; private set; } = CombatResult.InProgress;
+
+        /// <summary>Player-facing objective description, for HUDController to display alongside the result banner.</summary>
+        public string ObjectiveDescription => _objective?.Description ?? string.Empty;
+
+        public IReadOnlyList<Health> PlayerUnits => _playerUnits;
+        public IReadOnlyList<Health> EnemyUnits => _enemyUnits;
 
         private readonly List<Health> _playerUnits = new List<Health>();
         private readonly List<Health> _enemyUnits = new List<Health>();
+        private IObjective _objective;
 
         private void Awake()
         {
             Instance = this;
+            _objective = BuildObjective();
+        }
+
+        /// <summary>
+        /// Constructs the runtime strategy object from this component's serialized
+        /// configuration — the actual "pluggable objective" seam. Falls back to
+        /// DestroyAllEnemies (preserving every pre-2E scene's exact original behavior)
+        /// if DestroyTarget is selected but misconfigured, rather than throwing or
+        /// leaving victory permanently unreachable. Public (not private) so
+        /// Phase2EValidation (in the separate Editor assembly, where `internal`
+        /// wouldn't be visible) can exercise this decision directly — CombatManager's
+        /// Awake() (the only normal runtime caller) never runs outside Play mode, so a
+        /// headless edit-mode test can't reach this via the component lifecycle at all.
+        /// </summary>
+        public IObjective BuildObjective()
+        {
+            if (objectiveType == ObjectiveType.DestroyTarget)
+            {
+                Health targetHealth = objectiveTarget != null ? objectiveTarget.GetComponent<Health>() : null;
+                if (targetHealth != null)
+                    return new DestroyTargetObjective(targetHealth, objectiveTargetDescription);
+
+                Debug.LogWarning("[CombatManager] objectiveType=DestroyTarget but objectiveTarget is null or has " +
+                    "no Health component — falling back to DestroyAllEnemies.");
+            }
+
+            return new DestroyAllEnemiesObjective(this);
         }
 
         private void Start()
@@ -74,16 +134,20 @@ namespace Vanquish.Combat
             if (Result != CombatResult.InProgress)
                 return;
 
-            bool allEnemiesDown = AllDestroyed(_enemyUnits);
+            // Defeat stays a universal rule regardless of objective type — every
+            // scenario ends in defeat if the player has nothing left to fight with.
             bool allPlayersDown = AllDestroyed(_playerUnits);
+            bool victoryAchieved = _objective != null && _objective.IsVictoryAchieved();
 
-            if (allEnemiesDown)
+            if (victoryAchieved)
                 DeclareResult(CombatResult.Victory);
             else if (allPlayersDown)
                 DeclareResult(CombatResult.Defeat);
         }
 
-        private static bool AllDestroyed(List<Health> units)
+        /// <summary>Public (was private) so IObjective implementations — DestroyAllEnemiesObjective
+        /// in particular — can reuse the exact same "list non-empty and every entry destroyed" rule.</summary>
+        public static bool AllDestroyed(IReadOnlyList<Health> units)
         {
             if (units.Count == 0)
                 return false;
@@ -99,7 +163,7 @@ namespace Vanquish.Combat
         {
             Result = result;
             Debug.Log(result == CombatResult.Victory
-                ? $"[Combat] VICTORY — all enemy units destroyed. Awarding {victoryCurrencyReward} currency."
+                ? $"[Combat] VICTORY — {ObjectiveDescription} Awarding {victoryCurrencyReward} currency."
                 : "[Combat] DEFEAT — all player units destroyed.");
 
             if (result == CombatResult.Victory && PlayerProgress.Instance != null)

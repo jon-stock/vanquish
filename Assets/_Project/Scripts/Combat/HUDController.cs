@@ -38,6 +38,7 @@ namespace Vanquish.Combat
         private GUIStyle _labelStyle;
         private GUIStyle _resultStyle;
         private GUIStyle _markerLabelStyle;
+        private GUIStyle _objectiveLabelStyle;
         private Rigidbody _playerRigidbody;
 
         private void Start()
@@ -51,6 +52,7 @@ namespace Vanquish.Combat
             _labelStyle ??= new GUIStyle(GUI.skin.label) { fontSize = 18, normal = { textColor = Color.white } };
             _resultStyle ??= new GUIStyle(GUI.skin.label) { fontSize = 36, normal = { textColor = Color.yellow }, alignment = TextAnchor.MiddleCenter };
             _markerLabelStyle ??= new GUIStyle(GUI.skin.label) { fontSize = 12, normal = { textColor = Color.red }, alignment = TextAnchor.UpperCenter };
+            _objectiveLabelStyle ??= new GUIStyle(GUI.skin.label) { fontSize = 20, normal = { textColor = Color.white }, alignment = TextAnchor.MiddleCenter };
 
             DrawStatusPanel();
             DrawFlightPanel();
@@ -280,6 +282,13 @@ namespace Vanquish.Combat
 
             string text = CombatManager.Instance.Result == CombatResult.Victory ? "VICTORY" : "DEFEAT";
             GUI.Label(new Rect(0, Screen.height / 2f - 40f, Screen.width, 80f), text, _resultStyle);
+
+            // Phase 2E: show *which* objective was won/lost — increasingly meaningful
+            // now that victory isn't always "destroy all enemy units" (see
+            // CombatManager.ObjectiveDescription / IObjective).
+            string objective = CombatManager.Instance.ObjectiveDescription;
+            if (!string.IsNullOrEmpty(objective))
+                GUI.Label(new Rect(0, Screen.height / 2f + 20f, Screen.width, 30f), objective, _objectiveLabelStyle);
         }
     }
 }
