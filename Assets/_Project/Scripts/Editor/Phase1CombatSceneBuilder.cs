@@ -241,5 +241,24 @@ namespace Vanquish.EditorTools
             hud.playerHealth = player.GetComponent<Health>();
             hud.playerWeapon = player.GetComponent<WeaponController>();
         }
+
+        /// <summary>
+        /// Registers a scene in Build Settings if it isn't already there —
+        /// SceneManager.LoadScene(string) fails at runtime for any scene not in this
+        /// list. Shared by every Editor scene-builder that creates a new loadable
+        /// scene (Phase2EArenaBuilder, TestRangeSceneBuilder) rather than each keeping
+        /// its own copy.
+        /// </summary>
+        internal static void EnsureSceneInBuildSettings(string scenePath)
+        {
+            var scenes = new System.Collections.Generic.List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+            foreach (var existing in scenes)
+            {
+                if (existing.path == scenePath)
+                    return;
+            }
+            scenes.Add(new EditorBuildSettingsScene(scenePath, true));
+            EditorBuildSettings.scenes = scenes.ToArray();
+        }
     }
 }

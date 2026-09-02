@@ -29,6 +29,9 @@ namespace Vanquish.Workshop
         public TechNode[] techTree;
         public string combatSceneName = "Combat_Arena01";
 
+        [Tooltip("Phase 2G: the Test Range scene — no win/lose, no currency, purely observational. See EnterTestRange.")]
+        public string testRangeSceneName = "TestRange";
+
         [Header("Missile: single-option slots (only one variant seeded so far)")]
         public MissileAirframeDefinition missileAirframe;
         public FuelDefinition missileFuel;
@@ -493,22 +496,7 @@ namespace Vanquish.Workshop
             if (!_enterCombatButton.enabledSelf)
                 return;
 
-            // Stash the actual configured designs on PlayerProgress (a DontDestroyOnLoad
-            // singleton that survives the scene load) so the combat scene's
-            // CombatPlayerLoadoutApplier can spawn the player's real chosen loadout
-            // instead of Combat_Arena01's editor-time-baked Tier-0 default. Without
-            // this, every part-picker selection in this UI would be purely cosmetic —
-            // it would compute preview stats here and then have zero effect on the
-            // actual battle.
-            PlayerProgress progress = PlayerProgress.Instance;
-            if (progress != null)
-            {
-                TryBuildMissileLoadout(progress, out MissileLoadout missileLoadout);
-                if (TryBuildDroneLoadout(progress, missileLoadout, includeWeapon: true, out DroneLoadout strikeLoadout))
-                    progress.PendingStrikeDroneLoadout = strikeLoadout;
-                if (TryBuildDroneLoadout(progress, null, includeWeapon: false, out DroneLoadout scoutLoadout, useScoutSensor: true))
-                    progress.PendingScoutDroneLoadout = scoutLoadout;
-            }
+            PlayerProgress progress = StashCurrentLoadouts();
 
             // Phase 2E: load whichever scenario was picked via ScenarioPickerOverlay,
             // if any, falling back to the single hardcoded default scene so
@@ -518,6 +506,48 @@ namespace Vanquish.Workshop
                 ? progress.PendingScenario.sceneName
                 : combatSceneName;
             SceneManager.LoadScene(sceneToLoad);
+        }
+
+        /// <summary>
+        /// Phase 2G: Test Range entry point — same design-readiness gate and the same
+        /// PlayerProgress stashing as Enter Combat (so the Test Range shows the
+        /// player's actual current design, not a placeholder), but loads
+        /// testRangeSceneName instead and never touches PendingScenario, since Test
+        /// Range isn't one of the scenario picker's choices. Called by
+        /// TestRangeEntryOverlay's button.
+        /// </summary>
+        public void EnterTestRange()
+        {
+            if (!_enterCombatButton.enabledSelf)
+                return;
+
+            StashCurrentLoadouts();
+            SceneManager.LoadScene(testRangeSceneName);
+        }
+
+        /// <summary>
+        /// Stashes the actual configured designs on PlayerProgress (a DontDestroyOnLoad
+        /// singleton that survives the scene load) so the destination scene's
+        /// CombatPlayerLoadoutApplier can spawn the player's real chosen loadout
+        /// instead of that scene's editor-time-baked Tier-0 default. Without this,
+        /// every part-picker selection in this UI would be purely cosmetic — it would
+        /// compute preview stats here and then have zero effect on the actual battle
+        /// (or Test Range run). Shared by OnEnterCombatClicked and EnterTestRange so
+        /// both destinations see identical loadout-building logic.
+        /// </summary>
+        private PlayerProgress StashCurrentLoadouts()
+        {
+            PlayerProgress progress = PlayerProgress.Instance;
+            if (progress == null)
+                return null;
+
+            TryBuildMissileLoadout(progress, out MissileLoadout missileLoadout);
+            if (TryBuildDroneLoadout(progress, missileLoadout, includeWeapon: true, out DroneLoadout strikeLoadout))
+                progress.PendingStrikeDroneLoadout = strikeLoadout;
+            if (TryBuildDroneLoadout(progress, null, includeWeapon: false, out DroneLoadout scoutLoadout, useScoutSensor: true))
+                progress.PendingScoutDroneLoadout = scoutLoadout;
+
+            return progress;
         }
 
         private bool TryBuildMissileLoadout(PlayerProgress progress, out MissileLoadout loadout)

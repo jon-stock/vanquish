@@ -82,6 +82,13 @@ namespace Vanquish.EditorTools
                 Load<ScenarioDefinition>("Assets/_Project/Data/Scenarios/Scenario_PlateauSkirmish.asset"),
             };
 
+            // Phase 2G: "Test Range" entry point — see TestRangeEntryOverlay's own doc
+            // comment for why this is a separate small OnGUI overlay rather than a
+            // Workshop.uxml addition.
+            var testRangeGo = new GameObject("TestRangeEntryOverlay");
+            var testRangeOverlay = testRangeGo.AddComponent<TestRangeEntryOverlay>();
+            testRangeOverlay.workshopController = workshop;
+
             workshop.techTree = new[]
             {
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_01_MissileAirframe.asset"),

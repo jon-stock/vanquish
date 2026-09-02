@@ -927,6 +927,12 @@ the valley feels too slow to start.
 ---
 
 #### 2F — Base-Building / Support Architecture
+**Status: Deferred.** Skipped for now per project direction — still a genuine Phase 2
+sub-milestone (not moved to Phase 3), just worked out of order; revisit before Phase 2
+is considered fully closed out. 2G was completed ahead of it instead (PLAN.md's own
+technical note on 2G already flagged it as "a good candidate to build early or
+interleaved... rather than strictly last").
+
 **Goal:** Launch platforms, radar installations, datalink, and point defense become placeable, not implicit.
 
 - [ ] A pre-combat "placement" phase/mode where the player positions
@@ -972,28 +978,72 @@ too-steep/occupied placements), and both are destructible, detectable targets du
 #### 2G — Workshop Test Range
 **Goal:** Let the player validate a design's real flight/combat behavior before spending resources committing to an actual battle.
 
-- [ ] A "Test Range" mode reachable from the Workshop: spawns the player's current
+- [x] A "Test Range" mode reachable from the Workshop: spawns the player's current
   design (via the same `VehicleFactory` combat uses) against one or more stationary or
   simple-moving dummy targets, using the exact same simulation as real combat — this is
   explicitly the payoff of the "one data-driven part/stat model" principle from the
-  plan's Concept Summary.
-  - [ ] No win/lose consequences, no currency cost/reward — purely observational
-  (distance closed, hit/miss, time-to-kill against a dummy).
-- [ ] Reuse `Phase1CombatSceneBuilder`'s patterns for constructing the test range scene;
+  plan's Concept Summary. `TestRangeSceneBuilder` builds `TestRange.unity`: the
+  player's strike drone (via `CombatPlayerLoadoutApplier`, unmodified — it has no
+  dependency on `CombatManager` existing at all, only on finding `"Player_Drone"`/
+  `"Scout_Drone"` by name, so it's reusable here verbatim) against one **stationary**
+  dummy (an unarmed drone via `VehicleFactory.SpawnDrone` with no AI component
+  attached at all — electric multirotor propulsion applies zero thrust without a
+  steering source, so it simply sits still, with zero new code) and one
+  **simple-moving** dummy (same unarmed loadout + `ScoutPatrol`, identical in spirit
+  to Phase 2D's `CombatTestSceneBuilder.TestArchetype.ScoutPatrolOnly`, reused here for
+  its own purpose).
+  - [x] No win/lose consequences, no currency cost/reward — purely observational
+  (distance closed, hit/miss, time-to-kill against a dummy). No `CombatManager` is
+  spawned in this scene at all — confirmed `HUDController` already degrades
+  gracefully with no `CombatManager.Instance` (its `DrawCombatResult` no-ops), so no
+  HUD changes were needed. `TestRangeTelemetry` (new) is the purely observational
+  reporter: discovers every `Team.Enemy` unit with a `Health` component at `Start()`
+  (same scene-scan technique `CombatManager.Start()` already uses), and shows a
+  live per-target distance/HP readout that flips to `DESTROYED — TTK Xs` once
+  `Health.OnDestroyed` fires — no currency, no victory/defeat state anywhere in this
+  scene.
+- [x] Reuse `Phase1CombatSceneBuilder`'s patterns for constructing the test range scene;
   reuse `Phase0TestHarness`-style telemetry logging so test-range results are inspectable
   the same way Phase 0's validation was (this doubles as a fast manual/headless sanity
-  check any time new parts are added in 2A/2B).
-- [ ] `WorkshopController` needs a button/flow to enter test range with the currently
+  check any time new parts are added in 2A/2B). `TestRangeSceneBuilder` reuses
+  `Phase1CombatSceneBuilder`'s ground/light/camera/HUD/loadout-loading helpers exactly
+  like `CombatTestSceneBuilder`/`Phase2EArenaBuilder` already did — genuinely almost no
+  new scene-building code was needed. `TestRangeTelemetry`'s OnGUI panel + `Debug.Log`
+  time-to-kill line matches `Phase0TestHarness`'s "log the numbers, plain overlay,
+  nothing fancier" style rather than inventing a new report format.
+- [x] `WorkshopController` needs a button/flow to enter test range with the currently
   previewed design, and a way to return to the Workshop afterward (mirroring
-  `CombatManager`'s return-to-Workshop flow, but without the currency award).
+  `CombatManager`'s return-to-Workshop flow, but without the currency award). Added
+  `WorkshopController.EnterTestRange()` (same design-readiness gate as Enter Combat,
+  same `PlayerProgress` loadout-stashing — factored the previously-duplicated stashing
+  logic out into a shared `StashCurrentLoadouts()` helper reused by both entry points),
+  exposed via a new `TestRangeEntryOverlay` — a single OnGUI button in the Workshop
+  scene (same "ugly art is fine" precedent as `ScenarioPickerOverlay`/`HUDController`;
+  deliberately not a `Workshop.uxml` addition, for the same reasons `ScenarioPickerOverlay`
+  gave). `TestRangeTelemetry.workshopSceneName` provides the "return to Workshop"
+  button — no currency award anywhere on this path, unlike `CombatManager.DeclareResult`.
 
 **Technical notes:** This is the cheapest sub-milestone to build once 2A/2B exist,
 since it's almost entirely reuse of existing spawner/scene-building/telemetry code with
 new scene content and a UI entry point — a good candidate to build early or interleaved
-with 2A/2B rather than strictly last.
+with 2A/2B rather than strictly last. **Confirmed true in practice**: this sub-milestone
+was completed immediately after 2E (ahead of 2F, which was deferred) precisely because
+2A/2B/2D/2E had already built every piece it needed (`VehicleFactory`,
+`CombatPlayerLoadoutApplier`, `ScoutPatrol`, `Phase1CombatSceneBuilder`'s reusable
+helpers, the `ScenarioPickerOverlay`-style OnGUI-overlay-in-Workshop pattern) — the
+only genuinely new code was `TestRangeTelemetry` and a thin scene builder wiring
+existing pieces together.
 
 **Exit criteria:** Player can fire a design at a dummy target from the Workshop without
-entering a real battle, and see basic hit/miss/timing feedback.
+entering a real battle, and see basic hit/miss/timing feedback (✅ — verified
+headlessly: `TestRangeSceneBuilder.BuildScene` builds `TestRange.unity` with no errors,
+registers it in `EditorBuildSettings`, and a full 60-second headless Play-mode
+regression against it completes with no exceptions; rebuilt the Workshop scene to
+confirm `TestRangeEntryOverlay`'s wiring compiles/loads cleanly, and rebuilt both
+Phase 2E arenas to confirm the `EnsureSceneInBuildSettings` refactor — pulled out of
+`Phase2EArenaBuilder` into a shared `Phase1CombatSceneBuilder` helper once a third
+scene builder needed the same "register in Build Settings" logic — didn't regress
+anything).
 
 ---
 

@@ -126,7 +126,7 @@ namespace Vanquish.EditorTools
 
             System.IO.Directory.CreateDirectory("Assets/_Project/Scenes");
             EditorSceneManager.SaveScene(scene, ValleyScenePath);
-            EnsureSceneInBuildSettings(ValleyScenePath);
+            Phase1CombatSceneBuilder.EnsureSceneInBuildSettings(ValleyScenePath);
 
             Debug.Log($"[Phase2EArenaBuilder] Valley arena built and saved to {ValleyScenePath}");
         }
@@ -227,7 +227,7 @@ namespace Vanquish.EditorTools
 
             System.IO.Directory.CreateDirectory("Assets/_Project/Scenes");
             EditorSceneManager.SaveScene(scene, PlateauScenePath);
-            EnsureSceneInBuildSettings(PlateauScenePath);
+            Phase1CombatSceneBuilder.EnsureSceneInBuildSettings(PlateauScenePath);
 
             Debug.Log($"[Phase2EArenaBuilder] Plateau arena built and saved to {PlateauScenePath}");
         }
@@ -281,18 +281,6 @@ namespace Vanquish.EditorTools
 
                 index++;
             }
-        }
-
-        private static void EnsureSceneInBuildSettings(string scenePath)
-        {
-            var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
-            foreach (var existing in scenes)
-            {
-                if (existing.path == scenePath)
-                    return;
-            }
-            scenes.Add(new EditorBuildSettingsScene(scenePath, true));
-            EditorBuildSettings.scenes = scenes.ToArray();
         }
     }
 }
