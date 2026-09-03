@@ -39,12 +39,17 @@ namespace Vanquish.Combat
         private GUIStyle _resultStyle;
         private GUIStyle _markerLabelStyle;
         private GUIStyle _objectiveLabelStyle;
+        private GUIStyle _returnButtonStyle;
         private Rigidbody _playerRigidbody;
+        private FlightBody _playerFlightBody;
 
         private void Start()
         {
             if (player != null)
+            {
                 _playerRigidbody = player.GetComponent<Rigidbody>();
+                _playerFlightBody = player.GetComponent<FlightBody>();
+            }
         }
 
         private void OnGUI()
@@ -53,6 +58,7 @@ namespace Vanquish.Combat
             _resultStyle ??= new GUIStyle(GUI.skin.label) { fontSize = 36, normal = { textColor = Color.yellow }, alignment = TextAnchor.MiddleCenter };
             _markerLabelStyle ??= new GUIStyle(GUI.skin.label) { fontSize = 12, normal = { textColor = Color.red }, alignment = TextAnchor.UpperCenter };
             _objectiveLabelStyle ??= new GUIStyle(GUI.skin.label) { fontSize = 20, normal = { textColor = Color.white }, alignment = TextAnchor.MiddleCenter };
+            _returnButtonStyle ??= new GUIStyle(GUI.skin.button) { fontSize = 16 };
 
             DrawStatusPanel();
             DrawFlightPanel();
@@ -85,7 +91,14 @@ namespace Vanquish.Combat
             if (player == null)
                 return;
 
-            GUI.Box(new Rect(10, 90, 260, 110), GUIContent.none);
+            // Depth pass (direct user feedback: "there's no throttle indicator in the
+            // sandbox, so you can't tell how much power you're putting down"): reads
+            // FlightBody.throttleFraction directly — meaningful for a fixed-wing
+            // design (PlayerDroneController's throttle lever, 0-1); shows N/A for a
+            // multirotor, which has no single throttle lever concept (it's vectored
+            // thrust in whatever direction WASD/space asks for, not a power setting).
+            bool hasThrottle = _playerFlightBody != null && _playerFlightBody.useAerodynamicLift;
+            GUI.Box(new Rect(10, 90, 260, hasThrottle ? 135 : 110), GUIContent.none);
 
             float speed = _playerRigidbody != null ? _playerRigidbody.linearVelocity.magnitude : 0f;
             float altitudeMsl = player.position.y;
@@ -94,6 +107,13 @@ namespace Vanquish.Combat
 
             GUI.Label(new Rect(20, 95, 240, 25), $"Speed: {speed:F0} m/s", _labelStyle);
             GUI.Label(new Rect(20, 120, 240, 25), $"Altitude: {altitudeAgl:F0} m AGL ({altitudeMsl:F0} m MSL)", _labelStyle);
+
+            float nextLineY = 145f;
+            if (hasThrottle)
+            {
+                GUI.Label(new Rect(20, nextLineY, 240, 25), $"Throttle: {_playerFlightBody.throttleFraction * 100f:F0}%", _labelStyle);
+                nextLineY += 25f;
+            }
 
             DetectableSignature target = TeamAwareness.Instance != null
                 ? TeamAwareness.Instance.GetNearestKnownEnemy(Team.Player, player.position)
@@ -104,12 +124,12 @@ namespace Vanquish.Combat
                 float distance = Vector3.Distance(player.position, target.Position);
                 bool canFire = playerWeapon != null && playerWeapon.CanFire;
                 string lockText = canFire ? "LOCKED" : "TRACKING";
-                GUI.Label(new Rect(20, 145, 240, 25), $"Target: {target.name} — {distance:F0} m", _labelStyle);
-                GUI.Label(new Rect(20, 170, 240, 25), lockText, _labelStyle);
+                GUI.Label(new Rect(20, nextLineY, 240, 25), $"Target: {target.name} — {distance:F0} m", _labelStyle);
+                GUI.Label(new Rect(20, nextLineY + 25f, 240, 25), lockText, _labelStyle);
             }
             else
             {
-                GUI.Label(new Rect(20, 145, 240, 25), "Target: none", _labelStyle);
+                GUI.Label(new Rect(20, nextLineY, 240, 25), "Target: none", _labelStyle);
             }
         }
 
@@ -133,7 +153,13 @@ namespace Vanquish.Combat
             float y = 20f;
             var gaugeRect = new Rect(x, y, gaugeSize, gaugeSize);
 
-            float pitchDeg = -Mathf.Asin(Mathf.Clamp(Vector3.Dot(player.forward, Vector3.up), -1f, 1f)) * Mathf.Rad2Deg;
+            // Fix (direct user feedback: "we go into the brown when going up"): this used
+            // to be negated, which made climbing (forward pointing up) move the horizon
+            // UP the gauge (less sky, more ground) — the exact opposite of a real
+            // attitude indicator, where pitching up reveals more sky below a fixed nose
+            // reference. Positive pitchDeg (no negation) now correctly means "climbing"
+            // and pushes the horizon down (more sky) via horizonY below.
+            float pitchDeg = Mathf.Asin(Mathf.Clamp(Vector3.Dot(player.forward, Vector3.up), -1f, 1f)) * Mathf.Rad2Deg;
             float rollDeg = Vector3.SignedAngle(Vector3.up, player.up, player.forward);
 
             GUI.Box(gaugeRect, GUIContent.none);
@@ -289,6 +315,15 @@ namespace Vanquish.Combat
             string objective = CombatManager.Instance.ObjectiveDescription;
             if (!string.IsNullOrEmpty(objective))
                 GUI.Label(new Rect(0, Screen.height / 2f + 20f, Screen.width, 30f), objective, _objectiveLabelStyle);
+
+            // Phase 3A follow-up: CombatManager already auto-returns to the Workshop
+            // after resultToReturnDelaySeconds, but forcing the player to sit through
+            // that delay every time isn't the "consistent, in-UI return path" 3A's own
+            // goal calls for — this lets them leave immediately instead. Same
+            // OnGUI-immediate-mode style as the rest of this HUD.
+            var buttonRect = new Rect(Screen.width / 2f - 110f, Screen.height / 2f + 60f, 220f, 40f);
+            if (GUI.Button(buttonRect, "Return to Workshop", _returnButtonStyle))
+                CombatManager.Instance.ReturnToWorkshopNow();
         }
     }
 }

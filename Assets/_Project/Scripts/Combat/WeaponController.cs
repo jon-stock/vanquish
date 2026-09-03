@@ -16,12 +16,33 @@ namespace Vanquish.Combat
         public float fireCooldownSeconds = 2.5f;
         public Team ownerTeam = Team.Player;
 
+        [Tooltip("Depth pass (direct user feedback: \"the craft should actually get more missiles, with " +
+            "multiple being able to be in flight at once with the right missile tech (seekers)\"): how many " +
+            "missiles fired from THIS weapon can be independently guided in the air simultaneously — " +
+            "set from the missile's seeker type at spawn time (see VehicleFactory.ComputeMaxConcurrentInFlight). " +
+            "A wire/SARH/laser-guided round needs the launcher's continuous guidance/illumination for its " +
+            "whole flight (effectively 1 at a time); a true fire-and-forget seeker (active radar, imaging IR, " +
+            "multi-spectral) needs nothing further from the launcher, so several can fly at once. Before this " +
+            "existed, nothing capped concurrent missiles at all — cooldown/ammo were the only gates, so any " +
+            "seeker could already have unlimited missiles in the air simultaneously as long as ammo/cooldown allowed.")]
+        public int maxConcurrentInFlight = 1;
+
         [Tooltip("Local offset from the drone's origin that missiles spawn from, e.g. slightly ahead/below.")]
         public Vector3 launchOffset = new Vector3(0f, -0.3f, 1f);
 
         private float _cooldownTimer;
+        private int _inFlightCount;
 
-        public bool CanFire => ammoRemaining > 0 && _cooldownTimer <= 0f;
+        public bool CanFire => ammoRemaining > 0 && _cooldownTimer <= 0f && _inFlightCount < maxConcurrentInFlight;
+
+        /// <summary>
+        /// Phase 3B: raised after a successful Fire() (ammoRemaining already
+        /// decremented). MountedMissileVisuals listens to this to remove one visibly
+        /// mounted missile from the drone's hardpoints per shot, so the model's
+        /// visible missile count stays in sync with actual remaining ammo instead of
+        /// always showing a full rack.
+        /// </summary>
+        public event System.Action OnFired;
 
         private void Update()
         {
@@ -49,8 +70,35 @@ namespace Vanquish.Combat
 
             ammoRemaining--;
             _cooldownTimer = fireCooldownSeconds;
-            Debug.Log($"[Combat] {ownerTeam} '{name}' fired at '{target.name}' (ammo left: {ammoRemaining}) t={Time.time:F1}s");
+            _inFlightCount++;
+            missile.AddComponent<MissileLifecycleNotifier>().owner = this;
+
+            Debug.Log($"[Combat] {ownerTeam} '{name}' fired at '{target.name}' (ammo left: {ammoRemaining}, " +
+                $"{_inFlightCount}/{maxConcurrentInFlight} in flight) t={Time.time:F1}s");
+            OnFired?.Invoke();
             return true;
+        }
+
+        /// <summary>Called by MissileLifecycleNotifier when a missile this weapon fired is destroyed
+        /// (hit, or any other future despawn reason) — frees up a concurrent-in-flight slot.</summary>
+        internal void NotifyMissileResolved()
+        {
+            _inFlightCount = Mathf.Max(0, _inFlightCount - 1);
+        }
+    }
+
+    /// <summary>Tiny tracker added to every spawned missile so its owning WeaponController's
+    /// concurrent-in-flight count is freed up whenever the missile GameObject is destroyed,
+    /// regardless of why (impact today; any future despawn reason later) — see
+    /// WeaponController.maxConcurrentInFlight's own tooltip.</summary>
+    public class MissileLifecycleNotifier : MonoBehaviour
+    {
+        public WeaponController owner;
+
+        private void OnDestroy()
+        {
+            if (owner != null)
+                owner.NotifyMissileResolved();
         }
     }
 }

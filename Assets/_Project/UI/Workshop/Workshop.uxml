@@ -6,22 +6,24 @@
             <ui:Button name="debug-add-currency-button" text="+10,000 (Debug)" class="debug-currency-button" />
         </ui:VisualElement>
         <ui:VisualElement name="main-row" class="main-row">
-            <ui:VisualElement name="tech-tree-panel" class="panel">
-                <ui:Label text="Tech Tree" class="panel-header" />
-                <ui:ScrollView name="tech-tree-scroll" class="tech-tree-scroll" mode="Vertical" />
-            </ui:VisualElement>
             <ui:VisualElement name="part-picker-panel" class="panel">
-                <ui:Label text="Missile Loadout" class="panel-header" />
+                <ui:VisualElement name="designer-mode-tabs" class="designer-mode-tabs">
+                    <ui:Button name="mode-tab-craft" text="Craft" class="designer-mode-tab" />
+                    <ui:Button name="mode-tab-missile" text="Missile" class="designer-mode-tab" />
+                    <ui:Button name="mode-tab-research" text="Research" class="designer-mode-tab" />
+                </ui:VisualElement>
                 <ui:ScrollView name="part-picker-scroll" class="part-picker-scroll" mode="Vertical" />
             </ui:VisualElement>
-            <ui:VisualElement name="design-preview-panel" class="panel">
-                <ui:Label text="Current Design" class="panel-header" />
-                <ui:VisualElement name="missile-fuel-row" class="slider-row">
-                    <ui:Label name="missile-fuel-label" text="Fuel fill: 100%" class="slider-label" />
-                    <ui:Slider name="missile-fuel-slider" low-value="0" high-value="1" value="1" />
+            <ui:VisualElement name="design-preview-panel" class="panel design-preview-panel-expanded">
+                <ui:Image name="design-preview-viewport" class="design-preview-viewport">
+                    <ui:VisualElement name="design-stat-card" class="design-stat-card" />
+                </ui:Image>
+                <ui:Label text="Test Against" class="part-picker-section-header" />
+                <ui:VisualElement name="scenario-picker-content" class="scenario-picker-content" />
+                <ui:VisualElement name="deploy-button-row" class="deploy-button-row">
+                    <ui:Button name="enter-test-range-button" text="Test Range" class="enter-test-range-button" />
+                    <ui:Button name="enter-combat-button" text="Enter Combat" class="enter-combat-button" />
                 </ui:VisualElement>
-                <ui:VisualElement name="design-preview-content" class="design-preview-content" />
-                <ui:Button name="enter-combat-button" text="Enter Combat" class="enter-combat-button" />
             </ui:VisualElement>
         </ui:VisualElement>
     </ui:VisualElement>

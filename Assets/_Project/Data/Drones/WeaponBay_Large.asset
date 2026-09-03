@@ -24,5 +24,6 @@ MonoBehaviour:
   prerequisites: []
   payloadCapacityKg: 60
   maxMunitionCount: 8
+  internalCapacity: 0
   isInternal: 0
   cycleTimeSeconds: 2.5

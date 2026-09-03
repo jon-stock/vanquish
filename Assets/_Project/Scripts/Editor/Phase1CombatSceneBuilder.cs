@@ -150,10 +150,21 @@ namespace Vanquish.EditorTools
 
         internal static void BuildGround()
         {
+            // Depth pass (direct user feedback: "can the sandbox have infinite grass?
+            // the current terrain is tiny"): was scale 60 (~600x600m) — meanwhile
+            // seeded sensor/seeker ranges now reach up to 10000m (Sensor_Radar_LongRange)
+            // and the camera's far clip plane is already 12000m specifically to see
+            // that far. A 600m ground plane left most of a long-range engagement
+            // happening over visibly untextured nothing. Scaled up to 2000
+            // (~20000x20000m) — comfortably bigger than the far clip plane in every
+            // direction, so the ground edge is never actually visible regardless of
+            // engagement range, reading as effectively infinite without the cost of a
+            // real streaming/tiled terrain system.
+            const float groundScale = 2000f;
             GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
             ground.name = "Ground";
             ground.transform.position = Vector3.zero;
-            ground.transform.localScale = new Vector3(60f, 1f, 60f); // ~600x600m arena
+            ground.transform.localScale = new Vector3(groundScale, 1f, groundScale);
 
             // Plain grey gives no visual reference for motion/speed — apply a simple
             // procedural grid texture, tiled to the arena size, so movement and
@@ -163,7 +174,7 @@ namespace Vanquish.EditorTools
             {
                 var material = new Material(renderer.sharedMaterial);
                 material.mainTexture = CreateGridTexture();
-                material.mainTextureScale = new Vector2(60f, 60f); // one grid cell per ~10m
+                material.mainTextureScale = new Vector2(groundScale, groundScale); // one grid cell per ~10m, same density as before
                 renderer.sharedMaterial = material;
             }
         }
@@ -240,6 +251,12 @@ namespace Vanquish.EditorTools
             hud.player = player.transform;
             hud.playerHealth = player.GetComponent<Health>();
             hud.playerWeapon = player.GetComponent<WeaponController>();
+
+            // Every caller of BuildHud (Combat_Arena01, the Phase 2E arenas, and the
+            // Test Range via TestRangeSceneBuilder) gets ESC-to-pause/quit for free
+            // this way, rather than each scene builder wiring it separately.
+            var escapeMenuGo = new GameObject("EscapeMenu");
+            escapeMenuGo.AddComponent<EscapeMenuController>();
         }
 
         /// <summary>
@@ -258,6 +275,24 @@ namespace Vanquish.EditorTools
                     return;
             }
             scenes.Add(new EditorBuildSettingsScene(scenePath, true));
+            EditorBuildSettings.scenes = scenes.ToArray();
+        }
+
+        /// <summary>
+        /// Phase 3A: same as EnsureSceneInBuildSettings, but guarantees the scene sits
+        /// at a specific build index — needed for MainMenuSceneBuilder, since
+        /// SceneManager/the Editor Play button treat build index 0 as the app's actual
+        /// entry point. Removes any existing entry for this path first so re-running a
+        /// scene builder never produces a duplicate, then (re)inserts at the requested
+        /// index, shifting everything else down.
+        /// </summary>
+        internal static void EnsureSceneInBuildSettingsAtIndex(string scenePath, int index)
+        {
+            var scenes = new System.Collections.Generic.List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+            scenes.RemoveAll(existing => existing.path == scenePath);
+
+            int clampedIndex = Mathf.Clamp(index, 0, scenes.Count);
+            scenes.Insert(clampedIndex, new EditorBuildSettingsScene(scenePath, true));
             EditorBuildSettings.scenes = scenes.ToArray();
         }
     }

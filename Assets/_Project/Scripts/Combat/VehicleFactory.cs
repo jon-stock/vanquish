@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Vanquish.Core;
 using Vanquish.Data;
@@ -38,6 +39,17 @@ namespace Vanquish.Combat
             flightBody.Configure(stats.massKg, stats.thrustNewtons, stats.dragCoefficient, stats.maxGForce);
             flightBody.isThrusting = true;
 
+            // Depth pass: fuel fill now genuinely limits how long the engine burns —
+            // see MissileBurnController's own doc comment. A non-positive burn time
+            // (shouldn't happen with any seeded engine, but guards against one) is
+            // treated as "never runs out" rather than instantly killing thrust.
+            if (stats.effectiveBurnTimeSeconds > 0f)
+            {
+                var burnController = missile.AddComponent<MissileBurnController>();
+                burnController.flightBody = flightBody;
+                burnController.burnTimeSeconds = stats.effectiveBurnTimeSeconds;
+            }
+
             if (target != null)
             {
                 var guidance = missile.AddComponent<GuidanceController>();
@@ -46,6 +58,13 @@ namespace Vanquish.Combat
                 // datalink, if any) instead of always defaulting to pursuit — see
                 // GuidanceLawFactory for the mapping.
                 guidance.SetGuidanceLaw(GuidanceLawFactory.Create(loadout));
+                // Depth pass: the seeker's own range/FOV/countermeasure-susceptibility
+                // now genuinely gate whether guidance can correct at all this tick —
+                // see GuidanceController's own tooltips for why "always hits" was true
+                // before this was wired.
+                guidance.seekerRangeMeters = stats.seekerRangeMeters;
+                guidance.seekerFieldOfViewDegrees = stats.seekerFieldOfViewDegrees;
+                guidance.countermeasureSusceptibility = stats.countermeasureSusceptibility;
             }
 
             var signature = missile.AddComponent<DetectableSignature>();
@@ -93,17 +112,12 @@ namespace Vanquish.Combat
                 fuseRelay.owner = impact;
             }
 
-            Transform missileVisual = BuildVisualCapsule(missile.transform, new Vector3(0.4f, 0.9f, 0.4f));
-
-            // Dev-visibility pass (Phase 2D): team-colored body + a bright tail engine
-            // glow, since a plain grey 0.4m capsule in flight is otherwise almost
-            // impossible to notice before impact — see PLAN.md's Phase 2D technical
-            // notes for the full writeup on why draw distance felt bad.
-            TeamColorUtility.ApplyTeamColor(missileVisual, team);
-            // Parented to the (unscaled) missile root rather than the capsule visual
-            // itself, so this local offset isn't distorted by the capsule's own
-            // non-uniform scale/rotation.
-            DroneVisualBuilder.AddEngineGlow(missile.transform, new Vector3(0f, 0f, -0.9f), TeamColorUtility.GetColor(team));
+            // Phase 3B: MissileVisualBuilder derives body proportions from the
+            // airframe's own stats and gives the nose a seeker-specific shape (see
+            // its own doc comment) — team coloring and the tail engine glow are both
+            // handled inside it now, replacing the old fixed-size capsule + manual
+            // color/glow calls that used to live here.
+            MissileVisualBuilder.Build(missile.transform, loadout, team);
 
             return missile;
         }
@@ -140,7 +154,8 @@ namespace Vanquish.Combat
             // stick control instead — see its class comment for why), reading isThrusting
             // at spawn time (set here) to decide which control scheme applies.
             if (stats.requiresForwardFlight)
-                flightBody.Configure(stats.massKg, stats.thrustNewtons, stats.dragCoefficient, stats.maxGForce, stats.liftCoefficient);
+                flightBody.Configure(stats.massKg, stats.thrustNewtons, stats.dragCoefficient, stats.maxGForce, stats.liftCoefficient,
+                    stats.zeroLiftAoADegrees, stats.referenceAoADegrees, stats.criticalAoADegrees, stats.inducedDragFactor);
             else
                 flightBody.Configure(stats.massKg, stats.thrustNewtons, stats.dragCoefficient, stats.maxGForce);
 
@@ -180,39 +195,32 @@ namespace Vanquish.Combat
                 countermeasures.decoySuccessChance = loadout.countermeasure.decoySuccessChance;
             }
 
+            WeaponController weapon = null;
             if (loadout.missileLoadout != null && loadout.missileLoadout.IsComplete)
             {
-                var weapon = drone.AddComponent<WeaponController>();
+                weapon = drone.AddComponent<WeaponController>();
                 weapon.missileLoadout = loadout.missileLoadout;
-                weapon.ammoRemaining = loadout.ammoCount;
+                // Depth pass: ammoRemaining now uses the bay-capacity-clamped
+                // effectiveAmmoCount instead of the raw (previously unclamped)
+                // DroneLoadout.ammoCount — see WeaponBayDefinition.maxMunitionCount's
+                // own tooltip.
+                weapon.ammoRemaining = stats.effectiveAmmoCount;
                 weapon.ownerTeam = team;
+                // Depth pass (direct user feedback: "the craft should actually get more
+                // missiles, with multiple being able to be in flight at once with the
+                // right missile tech"): how many of this drone's own missiles can be
+                // guided simultaneously depends on the seeker — see
+                // WeaponController.maxConcurrentInFlight's own tooltip.
+                weapon.maxConcurrentInFlight = ComputeMaxConcurrentInFlight(loadout.missileLoadout.seeker);
             }
 
-            // Procedural visual — see DroneVisualBuilder. Multirotor airframes (rotorCount > 0,
-            // i.e. SmallQuad/Hexacopter) get the arms+spinning-rotors mesh sized to the
-            // airframe's actual rotorCount (Phase 2B quadcopter->hexacopter upgrade path);
-            // fixed-wing-style airframes (FixedWing/FlyingWingStealth/CcaScale, rotorCount == 0)
-            // get the fuselage+wings silhouette instead so a jet drone doesn't spawn looking
-            // like a quadcopter.
-            bool isMultirotor = loadout.airframe.rotorCount > 0;
-            Transform visual = isMultirotor
-                ? DroneVisualBuilder.BuildMultirotorVisual(drone.transform, loadout.airframe.rotorCount)
-                : DroneVisualBuilder.BuildFixedWingVisual(drone.transform);
-
-            // Dev-visibility pass (Phase 2D): team-colored materials instead of default
-            // grey, plus an engine glow on fixed-wing/jet drones specifically (their
-            // constant forward thrust is otherwise invisible — multirotors already have
-            // spinning rotors as their visual tell, so they're skipped here).
-            TeamColorUtility.ApplyTeamColor(visual, team);
-            if (!isMultirotor && stats.requiresForwardFlight)
-                DroneVisualBuilder.AddEngineGlow(visual, new Vector3(0f, 0f, -0.75f), TeamColorUtility.GetColor(team));
-
-            if (isMultirotor)
-            {
-                var tilt = drone.AddComponent<QuadcopterTiltVisual>();
-                tilt.body = rb;
-                tilt.visualRoot = visual;
-            }
+            // Procedural visual + hardpoint-mounted missiles — see
+            // BuildVisualAndMountedMissiles's own doc comment. Shared with
+            // BuildVisualOnlyDrone (the Workshop preview's code path) so "the model
+            // looks the same in the Workshop preview and in live combat" is
+            // structurally guaranteed by one implementation, not maintained by hand
+            // across two.
+            BuildVisualAndMountedMissiles(drone, loadout, stats, team, rb, weapon);
 
             if (CombatManager.Instance != null)
                 CombatManager.Instance.RegisterUnit(drone, team);
@@ -220,30 +228,133 @@ namespace Vanquish.Combat
             return drone;
         }
 
-        private static Transform BuildVisualCapsule(Transform parent, Vector3 scale)
+        /// <summary>
+        /// Phase 3B: builds a purely visual (no Rigidbody/Collider/AI/Health/
+        /// WeaponController) drone matching exactly what SpawnDrone would build for
+        /// this loadout/team — used by the Workshop's live design preview
+        /// (WorkshopPreviewStage) so the model shown while designing is guaranteed
+        /// identical to what actually spawns in combat, not a second hand-maintained
+        /// approximation. Returns an empty (childless) GameObject if the loadout isn't
+        /// complete yet (e.g. mid-way through picking parts) rather than throwing —
+        /// the preview should show "nothing yet", not crash, while the player is
+        /// still assembling a design.
+        /// </summary>
+        public static GameObject BuildVisualOnlyDrone(Transform parent, DroneLoadout loadout, Team team)
         {
-            GameObject visual = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            visual.name = "Visual";
-            DestroyComponent(visual.GetComponent<Collider>());
-            visual.transform.SetParent(parent, worldPositionStays: false);
-            visual.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            visual.transform.localScale = scale;
-            return visual.transform;
+            var preview = new GameObject($"PreviewDrone_{loadout?.designName ?? "Incomplete"}");
+            preview.transform.SetParent(parent, worldPositionStays: false);
+            preview.transform.localPosition = Vector3.zero;
+            preview.transform.localRotation = Quaternion.identity;
+
+            if (loadout == null || !loadout.IsComplete)
+                return preview;
+
+            DroneRuntimeStats stats = DesignStatsCalculator.Calculate(loadout);
+            BuildVisualAndMountedMissiles(preview, loadout, stats, team, rigidbody: null, weapon: null);
+            return preview;
         }
 
         /// <summary>
-        /// Safely destroys a component whether this factory is called at runtime
-        /// (Combat/Workshop Play mode) or from an Editor tool building a scene
-        /// (Object.Destroy is invalid outside Play mode and only warns/no-ops there).
+        /// Depth pass (direct user feedback: "the craft should actually get more
+        /// missiles, with multiple being able to be in flight at once with the right
+        /// missile tech (seekers)"): how many missiles from the same drone can be
+        /// independently guided at once is a real seeker-tech distinction in reality —
+        /// a semi-active radar/wire-guided round needs the launching platform's own
+        /// continuous guidance for its whole flight (effectively one at a time), while
+        /// a true fire-and-forget seeker (active radar, imaging IR, multi-spectral)
+        /// needs nothing from the launcher after release, so several can be in the air
+        /// simultaneously.
         /// </summary>
-        private static void DestroyComponent(Object obj)
+        private static int ComputeMaxConcurrentInFlight(SeekerDefinition seeker)
         {
-            if (obj == null)
-                return;
-            if (Application.isPlaying)
-                Object.Destroy(obj);
+            if (seeker == null)
+                return 1;
+
+            switch (seeker.seekerType)
+            {
+                case SeekerType.ActiveRadar:
+                case SeekerType.ImagingInfrared:
+                case SeekerType.MultiSpectral:
+                    return 4;
+                case SeekerType.Infrared:
+                case SeekerType.Optical:
+                    return 2; // passive, fire-and-forget-ish, but shorter-legged/simpler than the top tier
+                case SeekerType.SemiActiveRadar:
+                case SeekerType.Laser:
+                case SeekerType.WireOrDatalinkGuided:
+                case SeekerType.None:
+                default:
+                    return 1; // needs the launcher's continuous guidance/illumination/LOS for its whole flight
+            }
+        }
+
+        /// <summary>
+        /// The actual "pick the silhouette, color it, mount missiles on hardpoints"
+        /// sequence shared by SpawnDrone (a full gameplay entity) and
+        /// BuildVisualOnlyDrone (a static Workshop preview). `rigidbody`/`weapon` are
+        /// both nullable: a preview has neither (no tilt-on-bank visual, and mounted
+        /// missiles never deplete since nothing ever fires), while a real spawned
+        /// drone always has a Rigidbody and has a WeaponController whenever its
+        /// missile loadout is complete.
+        /// </summary>
+        private static Transform BuildVisualAndMountedMissiles(GameObject unitRoot, DroneLoadout loadout, DroneRuntimeStats stats,
+            Team team, Rigidbody rigidbody, WeaponController weapon)
+        {
+            // Multirotor airframes (rotorCount > 0, i.e. SmallQuad/Hexacopter) get the
+            // arms+spinning-rotors mesh sized to the airframe's actual rotorCount
+            // (Phase 2B quadcopter->hexacopter upgrade path); fixed-wing-style
+            // airframes (FixedWing/FlyingWingStealth/CcaScale, rotorCount == 0) get
+            // the fuselage+wings silhouette instead so a jet drone doesn't spawn
+            // looking like a quadcopter. Phase 3B: both builders take the whole
+            // loadout (wing shape, hull material finish, rotor material/size, sensor
+            // pod, engine glow, and hardpoint sockets are all handled inside them —
+            // see DroneVisualBuilder's own doc comment) and hand back the hardpoint
+            // sockets mounted missiles attach to.
+            bool isMultirotor = loadout.airframe.rotorCount > 0;
+            Transform visual;
+            Transform[] hardpoints;
+            float missileMountScale;
+            if (isMultirotor)
+                visual = DroneVisualBuilder.BuildMultirotorVisual(unitRoot.transform, loadout, team, out hardpoints, out missileMountScale);
             else
-                Object.DestroyImmediate(obj);
+                visual = DroneVisualBuilder.BuildFixedWingVisual(unitRoot.transform, loadout, team, out hardpoints, out missileMountScale);
+
+            if (isMultirotor && rigidbody != null)
+            {
+                var tilt = unitRoot.AddComponent<QuadcopterTiltVisual>();
+                tilt.body = rigidbody;
+                tilt.visualRoot = visual;
+            }
+
+            // Depth pass: mount exactly the EXTERNALLY-carried portion of the ammo
+            // load (DroneRuntimeStats.externallyMountedAmmoCount — internal-bay
+            // capacity used up first, per WeaponBayDefinition.internalCapacity's own
+            // tooltip), capped to however many hardpoint sockets this airframe
+            // actually has. A fully-internal bay (internalCapacity >=
+            // effectiveAmmoCount) mounts nothing visible, same end result as the old
+            // isInternal flag but now correct for a MIXED bay too (internal capacity
+            // filled first, only the overflow shows up externally). MountedMissileVisuals
+            // then keeps the visible count falling as a real drone actually fires
+            // (Initialize no-ops its event subscription when `weapon` is null, so
+            // a static Workshop preview's mounted missiles simply never deplete).
+            bool hasMissileLoadout = loadout.missileLoadout != null && loadout.missileLoadout.IsComplete;
+            if (hasMissileLoadout && hardpoints.Length > 0 && stats.externallyMountedAmmoCount > 0)
+            {
+                var mountedVisuals = new List<Transform>();
+                int mountCount = Mathf.Min(stats.externallyMountedAmmoCount, hardpoints.Length);
+                for (int i = 0; i < mountCount; i++)
+                {
+                    // Visual-polish pass: bridges the gap between the airframe body and
+                    // a hardpoint sitting below it — see BuildPylon's own doc comment.
+                    DroneVisualBuilder.BuildPylon(visual, hardpoints[i].localPosition, team, loadout.hullMaterial?.materialType);
+                    mountedVisuals.Add(MissileVisualBuilder.Build(hardpoints[i], loadout.missileLoadout, team, scale: missileMountScale));
+                }
+
+                if (mountedVisuals.Count > 0)
+                    unitRoot.AddComponent<MountedMissileVisuals>().Initialize(weapon, mountedVisuals);
+            }
+
+            return visual;
         }
     }
 }

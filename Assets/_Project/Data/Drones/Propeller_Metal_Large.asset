@@ -30,3 +30,7 @@ MonoBehaviour:
   rotorMaterial: 2
   rotorSize: 2
   structuralIntegrity: 0.8
+  zeroLiftAoADegrees: -2
+  referenceAoADegrees: 5
+  criticalAoADegrees: 16
+  inducedDragFactor: 0.02

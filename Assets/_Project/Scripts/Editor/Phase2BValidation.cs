@@ -114,10 +114,13 @@ namespace Vanquish.EditorTools
                 }
             }
 
-            // Wing types.
-            allPass &= CheckAsset<WingOrPropellerDefinition>($"{DronesDir}/Wing_FixedWing.asset");
-            allPass &= CheckAsset<WingOrPropellerDefinition>($"{DronesDir}/Wing_DeltaWing.asset");
-            allPass &= CheckAsset<WingOrPropellerDefinition>($"{DronesDir}/Wing_VariableSweepWing.asset");
+            // Wing types, including the fixed-wing-flight-model-rework lift-curve fields
+            // (criticalAoA > referenceAoA > zeroLiftAoA must hold for ComputeLiftFactor's
+            // curve to make sense — see FlightBody/WingOrPropellerDefinition).
+            // Wing_FixedWing was retired by Phase3HPlanformSeeder (see Phase3HValidation
+            // for the planform-preset-era wing checks, including Wing_FlyingWingKite).
+            allPass &= CheckWingLiftCurve($"{DronesDir}/Wing_DeltaWing.asset");
+            allPass &= CheckWingLiftCurve($"{DronesDir}/Wing_VariableSweepWing.asset");
 
             // Hull materials.
             allPass &= CheckAsset<HullMaterialDefinition>($"{DronesDir}/Hull_AluminumAlloy.asset");
@@ -129,9 +132,9 @@ namespace Vanquish.EditorTools
             allPass &= CheckPropulsion($"{DronesDir}/Propulsion_ICE_Basic.asset", expectForwardFlight: false);
             allPass &= CheckPropulsion($"{DronesDir}/Propulsion_Jet_Subsonic.asset", expectForwardFlight: true);
             allPass &= CheckPropulsion($"{DronesDir}/Propulsion_Jet_Supersonic.asset", expectForwardFlight: true);
-            allPass &= CheckAsset<DroneEngineDefinition>($"{DronesDir}/Engine_ICE_Basic.asset");
-            allPass &= CheckAsset<DroneEngineDefinition>($"{DronesDir}/Engine_Jet_Subsonic.asset");
-            allPass &= CheckAsset<DroneEngineDefinition>($"{DronesDir}/Engine_Jet_Supersonic.asset");
+            allPass &= CheckEngineForwardFlightFlag($"{DronesDir}/Engine_ICE_Basic.asset", expectForwardFlight: false);
+            allPass &= CheckEngineForwardFlightFlag($"{DronesDir}/Engine_Jet_Subsonic.asset", expectForwardFlight: true);
+            allPass &= CheckEngineForwardFlightFlag($"{DronesDir}/Engine_Jet_Supersonic.asset", expectForwardFlight: true);
             allPass &= CheckAsset<FuelDefinition>($"{SharedDir}/Fuel_Petrol_Basic.asset");
             allPass &= CheckAsset<FuelDefinition>($"{SharedDir}/Fuel_Diesel_Basic.asset");
             allPass &= CheckAsset<FuelDefinition>($"{SharedDir}/Fuel_JetFuel_Basic.asset");
@@ -157,23 +160,26 @@ namespace Vanquish.EditorTools
         public static void ValidateDroneBreadthTechWiring()
         {
             const string TechDir = "Assets/_Project/Data/TechTree";
+            // Note: TN_2B_drone_airframe_fixedwing/flyingwingstealth/ccascale and
+            // TN_2B_drone_wing_fixedwing/deltawing/variablesweepwing were retired by
+            // Phase3HPlanformSeeder in favor of 3 merged TN_3H_planform_* nodes; the
+            // individual ICE/Jet-Subsonic/Jet-Supersonic Propulsion+Engine nodes were
+            // retired by Phase3IPropulsionMergeSeeder in favor of 3 merged
+            // TN_3I_package_* nodes — see Phase3HValidation/Phase3IValidation for
+            // their equivalent tech-wiring checks.
             string[] nodeIds =
             {
-                "TN_2B_drone_airframe_smallhexa", "TN_2B_drone_airframe_fixedwing",
-                "TN_2B_drone_airframe_flyingwingstealth", "TN_2B_drone_airframe_ccascale",
+                "TN_2B_drone_airframe_smallhexa",
                 "TN_2B_drone_propeller_plastic_small", "TN_2B_drone_propeller_plastic_medium",
                 "TN_2B_drone_propeller_plastic_large", "TN_2B_drone_propeller_carbonfiber_small",
                 "TN_2B_drone_propeller_carbonfiber_medium", "TN_2B_drone_propeller_carbonfiber_large",
                 "TN_2B_drone_propeller_metal_small", "TN_2B_drone_propeller_metal_medium",
                 "TN_2B_drone_propeller_metal_large",
-                "TN_2B_drone_wing_fixedwing", "TN_2B_drone_wing_deltawing", "TN_2B_drone_wing_variablesweepwing",
                 "TN_2B_drone_hull_aluminumalloy", "TN_2B_drone_hull_carbonfiber",
                 "TN_2B_drone_hull_radarabsorbentmaterial", "TN_2B_drone_hull_titaniumalloy",
-                "TN_2B_drone_propulsion_ice_basic", "TN_2B_drone_engine_ice_basic",
-                "TN_2B_fuel_petrol_basic", "TN_2B_fuel_diesel_basic",
-                "TN_2B_drone_propulsion_jet_subsonic", "TN_2B_drone_engine_jet_subsonic", "TN_2B_fuel_jetfuel_basic",
-                "TN_2B_drone_propulsion_jet_supersonic", "TN_2B_drone_engine_jet_supersonic",
+                "TN_2B_fuel_petrol_basic", "TN_2B_fuel_diesel_basic", "TN_2B_fuel_jetfuel_basic",
                 "TN_2B_drone_weaponbay_large", "TN_2B_drone_weaponbay_internalmedium",
+                "TN_2B_drone_sensor_radar_advanced", "TN_2B_drone_sensor_radar_longrange",
             };
 
             bool allPass = true;
@@ -205,13 +211,9 @@ namespace Vanquish.EditorTools
                 }
             }
 
-            var supersonicNode = AssetDatabase.LoadAssetAtPath<TechNode>($"{TechDir}/TN_2B_drone_propulsion_jet_supersonic.asset");
-            var subsonicNode = AssetDatabase.LoadAssetAtPath<TechNode>($"{TechDir}/TN_2B_drone_propulsion_jet_subsonic.asset");
-            bool chainOk = supersonicNode != null && subsonicNode != null
-                && supersonicNode.prerequisites != null && supersonicNode.prerequisites.Length == 1
-                && supersonicNode.prerequisites[0] == subsonicNode;
-            Debug.Log($"[Phase2BValidation] Propulsion progression chain (Supersonic Jet requires Subsonic Jet): {(chainOk ? "PASS" : "FAIL")}");
-            allPass &= chainOk;
+            // Propulsion package progression (Supersonic Jet requires Subsonic Jet) is
+            // now checked in Phase3IValidation against the merged TN_3I_package_* nodes
+            // — see that class instead of duplicating the check here.
 
             Debug.Log($"[Phase2BValidation] Checked {checkedCount}/{nodeIds.Length} expected Phase 2B drone tech nodes. " +
                 (allPass ? "ALL PASS" : "ONE OR MORE FAILURES ABOVE"));
@@ -324,6 +326,45 @@ namespace Vanquish.EditorTools
             {
                 Debug.LogError($"[Phase2BValidation] FAIL: {path} misconfigured (class={airframe.airframeClass}, " +
                     $"rotorCount={airframe.rotorCount}, maxTakeOffMassKg={airframe.maxTakeOffMassKg}).");
+            }
+            return ok;
+        }
+
+        /// <summary>Fixed-wing flight-model rework: a wing's lift curve only makes sense if
+        /// criticalAoADegrees > referenceAoADegrees > zeroLiftAoADegrees (see FlightBody.ComputeLiftFactor).</summary>
+        private static bool CheckWingLiftCurve(string path)
+        {
+            var wing = AssetDatabase.LoadAssetAtPath<WingOrPropellerDefinition>(path);
+            if (wing == null)
+            {
+                Debug.LogError($"[Phase2BValidation] FAIL: missing wing asset {path}.");
+                return false;
+            }
+            bool ok = wing.criticalAoADegrees > wing.referenceAoADegrees && wing.referenceAoADegrees > wing.zeroLiftAoADegrees;
+            if (!ok)
+            {
+                Debug.LogError($"[Phase2BValidation] FAIL: {path} has an invalid lift curve " +
+                    $"(zeroLift={wing.zeroLiftAoADegrees}, reference={wing.referenceAoADegrees}, critical={wing.criticalAoADegrees} " +
+                    "— must satisfy critical > reference > zeroLift).");
+            }
+            return ok;
+        }
+
+        /// <summary>Fixed-wing flight-model rework: DroneEngineDefinition.requiresForwardFlight must match
+        /// its paired PropulsionDefinition's own flag — see DroneCompatibility.</summary>
+        private static bool CheckEngineForwardFlightFlag(string path, bool expectForwardFlight)
+        {
+            var engine = AssetDatabase.LoadAssetAtPath<DroneEngineDefinition>(path);
+            if (engine == null)
+            {
+                Debug.LogError($"[Phase2BValidation] FAIL: missing engine asset {path}.");
+                return false;
+            }
+            bool ok = engine.requiresForwardFlight == expectForwardFlight;
+            if (!ok)
+            {
+                Debug.LogError($"[Phase2BValidation] FAIL: {path} requiresForwardFlight=" +
+                    $"{engine.requiresForwardFlight}, expected {expectForwardFlight}.");
             }
             return ok;
         }

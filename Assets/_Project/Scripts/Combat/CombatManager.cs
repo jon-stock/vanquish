@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using Vanquish.Core;
 using Vanquish.Simulation.Sensors;
 
@@ -37,7 +36,7 @@ namespace Vanquish.Combat
         public static CombatManager Instance { get; private set; }
 
         public int victoryCurrencyReward = 100;
-        public string workshopSceneName = "Workshop";
+        public string workshopSceneName = SceneNames.Workshop;
         public float resultToReturnDelaySeconds = 3f;
 
         [Header("Objective (Phase 2E)")]
@@ -134,14 +133,21 @@ namespace Vanquish.Combat
             if (Result != CombatResult.InProgress)
                 return;
 
-            // Defeat stays a universal rule regardless of objective type — every
-            // scenario ends in defeat if the player has nothing left to fight with.
-            bool allPlayersDown = AllDestroyed(_playerUnits);
+            // Defeat triggers the moment the actual player-controlled craft
+            // (PlayerDroneController — always added to whichever unit the player
+            // flies, see Phase1CombatSceneBuilder/CombatPlayerLoadoutApplier) is
+            // destroyed, regardless of whether an unarmed escort like the scout
+            // drone is still alive. Previously this required every single
+            // Team.Player unit (including the scout) to be destroyed, which meant
+            // losing the drone you're actually flying didn't end the match at all
+            // as long as the scout survived — the match just hung in InProgress
+            // forever with the HUD referencing a destroyed player transform.
+            bool playerControlledUnitDown = health.GetComponent<PlayerDroneController>() != null;
             bool victoryAchieved = _objective != null && _objective.IsVictoryAchieved();
 
             if (victoryAchieved)
                 DeclareResult(CombatResult.Victory);
-            else if (allPlayersDown)
+            else if (playerControlledUnitDown)
                 DeclareResult(CombatResult.Defeat);
         }
 
@@ -164,7 +170,7 @@ namespace Vanquish.Combat
             Result = result;
             Debug.Log(result == CombatResult.Victory
                 ? $"[Combat] VICTORY — {ObjectiveDescription} Awarding {victoryCurrencyReward} currency."
-                : "[Combat] DEFEAT — all player units destroyed.");
+                : "[Combat] DEFEAT — the player-controlled drone was destroyed.");
 
             if (result == CombatResult.Victory && PlayerProgress.Instance != null)
                 PlayerProgress.Instance.AddCurrency(victoryCurrencyReward);
@@ -175,7 +181,26 @@ namespace Vanquish.Combat
 
         private void ReturnToWorkshop()
         {
-            SceneManager.LoadScene(workshopSceneName);
+            GameFlowController.ReturnToWorkshop(workshopSceneName);
+        }
+
+        /// <summary>
+        /// Lets the player skip the resultToReturnDelaySeconds wait instead of
+        /// forcing them to watch the VICTORY/DEFEAT banner for the full delay —
+        /// wired to HUDController's "Return to Workshop" button. Cancels the
+        /// scheduled auto-return Invoke first so clicking the button doesn't leave a
+        /// second LoadScene queued up behind it. Safe to call while
+        /// Result == InProgress (does nothing — HUDController only shows the button
+        /// once a result exists) or after workshopSceneName was left empty (matches
+        /// DeclareResult's own "no configured destination" behavior).
+        /// </summary>
+        public void ReturnToWorkshopNow()
+        {
+            if (Result == CombatResult.InProgress || string.IsNullOrEmpty(workshopSceneName))
+                return;
+
+            CancelInvoke(nameof(ReturnToWorkshop));
+            ReturnToWorkshop();
         }
     }
 }

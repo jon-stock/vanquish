@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using Vanquish.Core;
 using Vanquish.Simulation.Sensors;
 
@@ -21,7 +20,7 @@ namespace Vanquish.Combat
     public class TestRangeTelemetry : MonoBehaviour
     {
         public Transform player;
-        public string workshopSceneName = "Workshop";
+        public string workshopSceneName = SceneNames.Workshop;
 
         private class TargetRecord
         {
@@ -95,7 +94,7 @@ namespace Vanquish.Combat
 
             var buttonRect = new Rect(rect.x + 10f, rect.y + panelHeight - 32f, panelWidth - 20f, 26f);
             if (GUI.Button(buttonRect, "Return to Workshop", _buttonStyle))
-                SceneManager.LoadScene(workshopSceneName);
+                GameFlowController.ReturnToWorkshop(workshopSceneName);
         }
     }
 }

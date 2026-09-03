@@ -27,3 +27,4 @@ MonoBehaviour:
   burnTimeSeconds: 14
   maxSpeedMetersPerSecond: 320
   infraredSignature: 1.3
+  maneuverabilityMultiplier: 1

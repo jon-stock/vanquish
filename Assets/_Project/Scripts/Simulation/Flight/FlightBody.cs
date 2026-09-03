@@ -8,9 +8,30 @@ namespace Vanquish.Simulation.Flight
     /// drag force opposing velocity. Missiles and multirotor drones use just that —
     /// no lift/AoA model, deliberately simplified, sufficient to validate that
     /// data-driven mass/thrust/drag stats produce believable flight. Fixed-wing/jet
-    /// drones additionally get a real (if simplified) aerodynamic model — see
+    /// drones additionally get a real angle-of-attack-driven aerodynamic model — see
     /// useAerodynamicLift — since a constant-thrust-only body can't stay airborne
-    /// against gravity the way an aircraft's wings do.
+    /// against gravity the way an aircraft's wings do, and a naive "lift = speed^2"
+    /// model (this class's previous fixed-wing implementation) can't produce a real
+    /// stall or let banking curve the flight path correctly.
+    ///
+    /// Fixed-wing flight-model rework (see PLAN.md's "Fixed-Wing Flight Model Rework"
+    /// sub-milestone): the previous version of this class computed fixed-wing lift as
+    /// a flat `liftCoefficient * speed^2` along transform.up regardless of attitude —
+    /// no angle of attack, no stall, and (for the player specifically, whose nose
+    /// direction is NOT locked to velocity via orientToVelocity) no physical reason a
+    /// steep climb should ever lose lift. This version computes a real angle of
+    /// attack (the angle between the nose and the actual velocity vector, in the
+    /// pitch plane) each tick and looks up a lift-curve factor from it (see
+    /// ComputeLiftFactor) — flying at the wing's tuned referenceAoADegrees produces
+    /// exactly liftCoefficient*speed^2 of lift (unchanged from before at that one
+    /// angle), but AoA above criticalAoADegrees now genuinely stalls (lift collapses)
+    /// and AoA below zeroLiftAoADegrees now genuinely produces negative lift
+    /// (downforce), matching a real airfoil. For AI/missile-style bodies
+    /// (orientToVelocity = true), the nose is kept aligned to velocity every tick, so
+    /// AoA stays near zero and this mostly behaves like the old flat model — the real
+    /// difference is entirely for the player's manually-piloted attitude, which is
+    /// exactly where "maneuvering works correctly" (stalls when it should, turns via
+    /// banking rather than skidding) actually matters.
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
     public class FlightBody : MonoBehaviour
@@ -19,7 +40,8 @@ namespace Vanquish.Simulation.Flight
         [Tooltip("Total assembled mass in kg — set from summed part masses, mirrors Rigidbody.mass.")]
         public float massKg = 50f;
 
-        [Tooltip("Thrust force in Newtons, applied along transform.forward while thrusting.")]
+        [Tooltip("Thrust force in Newtons at full throttle, applied along transform.forward while thrusting " +
+                 "(scaled by throttleFraction — see below).")]
         public float thrustNewtons = 500f;
 
         [Tooltip("Quadratic drag coefficient — force = dragCoefficient * speed^2, opposing velocity.")]
@@ -46,22 +68,39 @@ namespace Vanquish.Simulation.Flight
         [Header("Runtime State")]
         public bool isThrusting = true;
 
+        [Tooltip("Throttle lever, 0 (idle, no thrust) to 1 (full rated thrustNewtons). Defaults to 1 so " +
+            "missiles/AI-controlled drones (which never touch this) behave exactly as before this field " +
+            "existed — full constant thrust whenever isThrusting is true. PlayerDroneController's fixed-wing " +
+            "control scheme is the one thing that actually varies this at runtime, replacing the old " +
+            "\"add an extra ad-hoc force on top of constant thrust\" hack with a real throttle lever.")]
+        [Range(0f, 1f)]
+        public float throttleFraction = 1f;
+
         [Header("Aerodynamic Lift (fixed-wing/jet only)")]
-        [Tooltip("Enables a simplified lift model: a force along transform.up, scaling with speed^2 and " +
-            "liftCoefficient, applied every FixedUpdate. Off (false, the default) for missiles and " +
-            "multirotor drones — missiles are thrust/steering-vectored and don't need lift, and " +
-            "multirotors get vertical lift for free from vectored thrust (see the class comment); this is " +
-            "specifically the 'real aerodynamic model' Phase 1's simplification note above said Phase 2 " +
-            "would need for fixed-wing/jet drones. useGravity is force-enabled alongside this (there's no " +
-            "point counteracting gravity with lift if gravity is off) and force-disabled when this is off.")]
+        [Tooltip("Enables the angle-of-attack aerodynamic model (lift + induced drag, computed every " +
+            "FixedUpdate from the current AoA — see ComputeLiftFactor). Off (false, the default) for " +
+            "missiles and multirotor drones — missiles are thrust/steering-vectored and don't need lift, and " +
+            "multirotors get vertical lift for free from vectored thrust (see the class comment). useGravity " +
+            "is force-enabled alongside this and force-disabled when this is off.")]
         public bool useAerodynamicLift = false;
 
-        [Tooltip("Lift coefficient — from the design's wing part (WingOrPropellerDefinition.liftCoefficient). " +
-            "Deliberately no separate tunable 'stall speed': lift = liftCoefficient * speed^2 already falls " +
-            "off steeply at low speed on its own (quadratic in speed), producing a natural, ungimmicked " +
-            "stall/nose-drop when flying too slowly to generate enough lift to counteract gravity, without " +
-            "an extra magic-number threshold that could get out of sync with mass/thrust/drag.")]
+        [Tooltip("Lift coefficient from the design's wing part (WingOrPropellerDefinition.liftCoefficient). " +
+            "Tuned such that flying at exactly referenceAoADegrees produces liftCoefficient*speed^2 of lift " +
+            "(ComputeLiftFactor returns 1 at that angle) — see WingOrPropellerDefinition's own tooltips.")]
         public float liftCoefficient = 1f;
+
+        [Tooltip("Angle of attack (degrees) at which this design's wing generates zero lift. See " +
+            "WingOrPropellerDefinition.zeroLiftAoADegrees.")]
+        public float zeroLiftAoADegrees = -2f;
+
+        [Tooltip("Angle of attack (degrees) liftCoefficient was tuned at. See WingOrPropellerDefinition.referenceAoADegrees.")]
+        public float referenceAoADegrees = 5f;
+
+        [Tooltip("Angle of attack (degrees) beyond which the wing stalls. See WingOrPropellerDefinition.criticalAoADegrees.")]
+        public float criticalAoADegrees = 16f;
+
+        [Tooltip("Lift-induced drag factor. See WingOrPropellerDefinition.inducedDragFactor.")]
+        public float inducedDragFactor = 0.02f;
 
         [Header("Player-Piloted Fixed-Wing Only")]
         [Tooltip("When true, applies a damping force against any velocity component perpendicular to " +
@@ -77,6 +116,11 @@ namespace Vanquish.Simulation.Flight
         [Tooltip("How strongly alignVelocityToForward damps sideways/vertical-relative-to-nose velocity. " +
             "Higher = flight path snaps to the nose direction faster (more arcade-y); lower = more drift/slip.")]
         public float velocityAlignmentStrength = 2f;
+
+        /// <summary>Angle of attack computed on the most recent FixedUpdate, in degrees. Read-only —
+        /// exposed purely for telemetry/HUD readouts (e.g. the fixed-wing prototype rig's overlay) and
+        /// headless inspection; FixedUpdate is the only writer.</summary>
+        public float CurrentAngleOfAttackDegrees { get; private set; }
 
         private Rigidbody _rigidbody;
 
@@ -107,15 +151,24 @@ namespace Vanquish.Simulation.Flight
         }
 
         /// <summary>
-        /// Fixed-wing/jet drone variant of Configure: also engages the aerodynamic lift
-        /// model and enables gravity (there's no reason to fly against gravity without
-        /// lift to counteract it, and no reason to have lift with gravity off).
+        /// Fixed-wing/jet drone variant of Configure: also engages the angle-of-attack
+        /// aerodynamic lift model and enables gravity (there's no reason to fly against
+        /// gravity without lift to counteract it, and no reason to have lift with
+        /// gravity off). Throttle starts at full (1) — a constant-cruise-thrust default
+        /// matching every non-player (AI/missile-style) body's behavior; only
+        /// PlayerDroneController's fixed-wing control scheme varies it after spawn.
         /// </summary>
-        public void Configure(float mass, float thrust, float drag, float maxG, float liftCoeff)
+        public void Configure(float mass, float thrust, float drag, float maxG, float liftCoeff,
+            float zeroLiftAoA, float referenceAoA, float criticalAoA, float inducedDrag)
         {
             Configure(mass, thrust, drag, maxG);
             useAerodynamicLift = true;
             liftCoefficient = liftCoeff;
+            zeroLiftAoADegrees = zeroLiftAoA;
+            referenceAoADegrees = referenceAoA;
+            criticalAoADegrees = criticalAoA;
+            inducedDragFactor = inducedDrag;
+            throttleFraction = 1f;
             useGravity = true;
             if (_rigidbody != null)
                 _rigidbody.useGravity = true;
@@ -144,34 +197,131 @@ namespace Vanquish.Simulation.Flight
             }
         }
 
+        /// <summary>
+        /// Angle of attack: the signed angle, in the aircraft's pitch plane, between
+        /// the nose (forward) and the actual velocity vector — i.e. how far the nose is
+        /// pitched above (positive) or below (negative) the direction the aircraft is
+        /// actually moving. Sideslip (yaw mismatch between nose and velocity) is
+        /// deliberately excluded by projecting velocity onto the forward/up plane
+        /// first, matching the standard aerospace definition of AoA (as distinct from
+        /// sideslip angle, which this simplified model doesn't separately track). Pure
+        /// function — headlessly testable without a Rigidbody/scene; sign convention
+        /// verified in Phase3GFixedWingValidation.ValidateAngleOfAttackSign.
+        /// </summary>
+        public static float ComputeAngleOfAttackDegrees(Vector3 forward, Vector3 right, Vector3 velocity)
+        {
+            if (velocity.sqrMagnitude < 0.01f)
+                return 0f;
+
+            Vector3 velocityInPitchPlane = Vector3.ProjectOnPlane(velocity, right);
+            if (velocityInPitchPlane.sqrMagnitude < 0.0001f)
+                return 0f;
+
+            return Vector3.SignedAngle(forward, velocityInPitchPlane.normalized, right);
+        }
+
+        /// <summary>
+        /// Simplified lift-curve lookup: returns a multiplier on liftCoefficient*speed^2
+        /// as a function of the current angle of attack. Returns exactly 1 at
+        /// referenceAoADegrees (where the wing part's liftCoefficient was tuned), rises
+        /// linearly above/below that toward criticalAoADegrees, and beyond
+        /// criticalAoADegrees (in either direction — see the negative-side mirroring
+        /// below) collapses toward a lower post-stall plateau over an additional 10
+        /// degrees rather than instantly to zero, matching how a real airfoil's lift
+        /// curve actually behaves post-stall (a partial, not total, loss of lift). Pure
+        /// function — headlessly testable, no Rigidbody/scene required.
+        /// </summary>
+        public static float ComputeLiftFactor(float aoaDegrees, float zeroLiftAoADegrees, float referenceAoADegrees,
+            float criticalAoADegrees)
+        {
+            const float postStallFalloffRangeDegrees = 10f;
+            const float postStallPlateauFraction = 0.35f;
+
+            float aoaSpan = Mathf.Max(0.01f, referenceAoADegrees - zeroLiftAoADegrees);
+            float slopePerDegree = 1f / aoaSpan;
+
+            // Mirror the critical angle onto the negative side around zeroLiftAoADegrees
+            // rather than around 0 — e.g. zeroLift=-2, reference=5, critical=16 gives a
+            // negative-side stall onset at -2-(16-5) = -13. Simplification: real airfoils
+            // usually stall earlier (in magnitude) on the negative/inverted side than the
+            // positive side, but a symmetric mirror is a reasonable Phase-appropriate
+            // approximation and keeps this a 3-input curve instead of 4.
+            float negativeStallOnset = zeroLiftAoADegrees - (criticalAoADegrees - referenceAoADegrees);
+
+            if (aoaDegrees > criticalAoADegrees)
+            {
+                float peakFactor = (criticalAoADegrees - zeroLiftAoADegrees) * slopePerDegree;
+                float overshoot = aoaDegrees - criticalAoADegrees;
+                float falloff = Mathf.Lerp(1f, postStallPlateauFraction, Mathf.Clamp01(overshoot / postStallFalloffRangeDegrees));
+                return peakFactor * falloff;
+            }
+
+            if (aoaDegrees < negativeStallOnset)
+            {
+                float peakFactor = (negativeStallOnset - zeroLiftAoADegrees) * slopePerDegree;
+                float overshoot = negativeStallOnset - aoaDegrees;
+                float falloff = Mathf.Lerp(1f, postStallPlateauFraction, Mathf.Clamp01(overshoot / postStallFalloffRangeDegrees));
+                return peakFactor * falloff;
+            }
+
+            return (aoaDegrees - zeroLiftAoADegrees) * slopePerDegree;
+        }
+
         private void FixedUpdate()
         {
             if (isThrusting)
             {
-                _rigidbody.AddForce(transform.forward * thrustNewtons, ForceMode.Force);
+                _rigidbody.AddForce(transform.forward * (thrustNewtons * throttleFraction), ForceMode.Force);
             }
 
             Vector3 velocity = _rigidbody.linearVelocity;
             float speed = velocity.magnitude;
+            float speedSquared = speed * speed;
 
-            // Simple quadratic drag opposing current velocity.
-            if (speed > 0.01f)
-            {
-                Vector3 dragForce = -velocity.normalized * (dragCoefficient * speed * speed);
-                _rigidbody.AddForce(dragForce, ForceMode.Force);
-            }
-
-            // Simplified aerodynamic lift: a force along transform.up, quadratic in
-            // speed. Deliberately uncapped at the low end (see liftCoefficient's
-            // tooltip re: natural stall behavior) but clamped at the high end to
-            // maxGForce so a fast jet doesn't generate an unbounded climb force —
-            // same physical limit ApplySteering already respects for lateral maneuvers.
             if (useAerodynamicLift)
             {
-                float liftMagnitude = liftCoefficient * speed * speed;
-                float maxLiftForce = maxGForce * GRAVITY_MPS2 * _rigidbody.mass;
-                liftMagnitude = Mathf.Min(liftMagnitude, maxLiftForce);
-                _rigidbody.AddForce(transform.up * liftMagnitude, ForceMode.Force);
+                // Real angle-of-attack-driven lift + induced drag — see the class doc
+                // comment and ComputeLiftFactor for what changed vs. the old flat model.
+                CurrentAngleOfAttackDegrees = ComputeAngleOfAttackDegrees(transform.forward, transform.right, velocity);
+                float liftFactor = ComputeLiftFactor(CurrentAngleOfAttackDegrees, zeroLiftAoADegrees, referenceAoADegrees, criticalAoADegrees);
+
+                if (speed > 0.01f)
+                {
+                    // Lift acts perpendicular to the actual relative airflow (velocity),
+                    // not perpendicular to the fuselage — projecting transform.up onto
+                    // the plane perpendicular to velocity keeps this correct at
+                    // significant AoA/sideslip and (critically) is what makes banking
+                    // redirect lift sideways and curve the flight path into a coordinated
+                    // turn, rather than lift always just fighting gravity regardless of
+                    // bank angle.
+                    Vector3 liftDirection = Vector3.ProjectOnPlane(transform.up, velocity).normalized;
+                    if (liftDirection.sqrMagnitude < 0.001f)
+                        liftDirection = transform.up;
+
+                    float maxLiftForce = maxGForce * GRAVITY_MPS2 * _rigidbody.mass;
+                    float liftMagnitude = Mathf.Clamp(liftCoefficient * speedSquared * liftFactor, -maxLiftForce, maxLiftForce);
+                    _rigidbody.AddForce(liftDirection * liftMagnitude, ForceMode.Force);
+
+                    // Parasite drag (existing convention, from airframe+wing dragCoefficient)
+                    // plus lift-induced drag — proportional to liftFactor^2, so hard
+                    // maneuvering/high-AoA flight costs real speed, same as a real aircraft
+                    // bleeding energy in a hard turn.
+                    float totalDragCoefficient = dragCoefficient + inducedDragFactor * liftFactor * liftFactor;
+                    Vector3 dragForce = -velocity.normalized * (totalDragCoefficient * speedSquared);
+                    _rigidbody.AddForce(dragForce, ForceMode.Force);
+                }
+            }
+            else
+            {
+                CurrentAngleOfAttackDegrees = 0f;
+
+                // Simple quadratic drag opposing current velocity — missiles/multirotors,
+                // unchanged from before this rework.
+                if (speed > 0.01f)
+                {
+                    Vector3 dragForce = -velocity.normalized * (dragCoefficient * speedSquared);
+                    _rigidbody.AddForce(dragForce, ForceMode.Force);
+                }
             }
 
             // Player-piloted fixed-wing: damp velocity components that don't match the

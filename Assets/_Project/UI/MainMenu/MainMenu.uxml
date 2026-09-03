@@ -1,0 +1,14 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:Style src="MainMenu.uss" />
+    <ui:VisualElement name="root" class="root">
+        <ui:VisualElement name="title-block" class="title-block">
+            <ui:Label text="VANQUISH" class="title-label" />
+            <ui:Label text="Modular missile &amp; drone combat" class="subtitle-label" />
+        </ui:VisualElement>
+        <ui:VisualElement name="menu-panel" class="menu-panel">
+            <ui:Button name="design-craft-button" text="Design Craft" class="menu-button menu-button-primary" />
+            <ui:Button name="campaign-button" text="Campaign" class="menu-button" />
+            <ui:Button name="skirmish-button" text="Skirmish" class="menu-button" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

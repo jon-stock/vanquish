@@ -26,6 +26,15 @@ namespace Vanquish.EditorTools
         private const string VisualTreeAssetPath = "Assets/_Project/UI/Workshop/Workshop.uxml";
         private const string StyleSheetPath = "Assets/_Project/UI/Workshop/Workshop.uss";
         private const string PanelSettingsPath = "Assets/_Project/UI/Workshop/WorkshopPanelSettings.asset";
+        private const string PreviewRenderTexturePath = "Assets/_Project/UI/Workshop/WorkshopPreviewRT.asset";
+
+        // Phase 3B: the live 3D design preview's camera is culled to this layer so it
+        // renders only the preview model and nothing else in the scene — see
+        // EditorLayerSetup's doc comment for why a Layer (not distance/tag) is the
+        // right culling mechanism here. Index 30 (not 31) to leave the very last user
+        // layer slot free for whatever needs it next.
+        private const string PreviewLayerName = "WorkshopPreview";
+        private const int PreviewLayerIndex = 30;
 
         [MenuItem("Vanquish/Phase 1/Build Workshop Scene")]
         public static void BuildScene()
@@ -40,6 +49,17 @@ namespace Vanquish.EditorTools
             // comment in Phase1CombatSceneBuilder.BuildScene about why loading assets
             // before EditorSceneManager.NewScene can cause them to go "fake null".
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+            EditorLayerSetup.EnsureLayer(PreviewLayerName, PreviewLayerIndex);
+            int previewLayer = LayerMask.NameToLayer(PreviewLayerName);
+
+            // Phase 3B follow-up: flat scene-wide ambient fill so the preview
+            // stage's materials (especially metallic hull finishes — see
+            // BuildPreviewStage's own comment) don't render near-black in the
+            // shadowed/unlit-facing parts of the model with no skybox to bounce
+            // light off of.
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+            RenderSettings.ambientLight = new Color(0.22f, 0.24f, 0.28f);
 
             var bootstrapGo = new GameObject("GameBootstrap");
             bootstrapGo.AddComponent<PlayerProgress>();
@@ -58,6 +78,10 @@ namespace Vanquish.EditorTools
             camera.cullingMask = 0; // nothing to render — this exists solely to clear the Game View
             cameraGo.AddComponent<AudioListener>();
 
+            WorkshopPreviewStage previewStage = BuildPreviewStage(previewLayer);
+            RenderTexture previewRenderTexture = GetOrCreatePreviewRenderTexture();
+            WireUpPreviewCamera(previewStage, previewLayer, previewRenderTexture);
+
             var workshopGo = new GameObject("WorkshopController");
 
             var uiDocument = workshopGo.AddComponent<UIDocument>();
@@ -65,29 +89,23 @@ namespace Vanquish.EditorTools
             uiDocument.panelSettings = GetOrCreatePanelSettings();
 
             var workshop = workshopGo.AddComponent<WorkshopController>();
-            workshop.combatSceneName = "Combat_Arena01";
+            workshop.combatSceneName = SceneNames.DefaultCombatArena;
+            workshop.testRangeSceneName = SceneNames.TestRange;
+            workshop.previewStage = previewStage;
+            workshop.previewRenderTexture = previewRenderTexture;
 
-            // Phase 2E: "scenario selection needs a place to live" — a small OnGUI
-            // picker overlay listing every seeded ScenarioDefinition (see
-            // ScenarioPickerOverlay's own doc comment for why OnGUI rather than a
-            // Workshop.uxml addition). Missing/unseeded assets are logged, not fatal —
-            // an older/partial data-seed state just means the overlay renders nothing
-            // and Enter Combat falls back to combatSceneName above, same as before 2E.
-            var scenarioPickerGo = new GameObject("ScenarioPickerOverlay");
-            var scenarioPicker = scenarioPickerGo.AddComponent<ScenarioPickerOverlay>();
-            scenarioPicker.scenarios = new[]
+            // Phase 2E/3A: every scenario the player can pick to test against, now a
+            // real in-UI part of WorkshopController (Workshop.uxml's
+            // "scenario-picker-content") instead of the old OnGUI ScenarioPickerOverlay.
+            // Missing/unseeded assets are logged, not fatal — an older/partial
+            // data-seed state just means the picker shows fewer rows and Enter Combat
+            // falls back to combatSceneName above.
+            workshop.scenarioOptions = new[]
             {
                 Load<ScenarioDefinition>("Assets/_Project/Data/Scenarios/Scenario_TierZeroSkirmish.asset"),
                 Load<ScenarioDefinition>("Assets/_Project/Data/Scenarios/Scenario_ValleyInterdiction.asset"),
                 Load<ScenarioDefinition>("Assets/_Project/Data/Scenarios/Scenario_PlateauSkirmish.asset"),
             };
-
-            // Phase 2G: "Test Range" entry point — see TestRangeEntryOverlay's own doc
-            // comment for why this is a separate small OnGUI overlay rather than a
-            // Workshop.uxml addition.
-            var testRangeGo = new GameObject("TestRangeEntryOverlay");
-            var testRangeOverlay = testRangeGo.AddComponent<TestRangeEntryOverlay>();
-            testRangeOverlay.workshopController = workshop;
 
             workshop.techTree = new[]
             {
@@ -121,10 +139,11 @@ namespace Vanquish.EditorTools
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2A_missile_jamming_ecmpod.asset"),
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2A_missile_jamming_eccmsuite.asset"),
                 // Phase 2B drone breadth — seeded by Phase2BDroneBreadthSeeder.SeedTechTreeNodes().
+                // Note: TN_2B_drone_airframe_fixedwing/flyingwingstealth/ccascale and
+                // TN_2B_drone_wing_fixedwing/deltawing/variablesweepwing were retired by
+                // Phase3HPlanformSeeder.RetireOldIndividualTechNodes in favor of the 3
+                // merged TN_3H_planform_* nodes below (see its own doc comment).
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_airframe_smallhexa.asset"),
-                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_airframe_fixedwing.asset"),
-                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_airframe_flyingwingstealth.asset"),
-                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_airframe_ccascale.asset"),
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propeller_plastic_small.asset"),
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propeller_plastic_medium.asset"),
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propeller_plastic_large.asset"),
@@ -134,30 +153,44 @@ namespace Vanquish.EditorTools
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propeller_metal_small.asset"),
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propeller_metal_medium.asset"),
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propeller_metal_large.asset"),
-                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_wing_fixedwing.asset"),
-                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_wing_deltawing.asset"),
-                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_wing_variablesweepwing.asset"),
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_hull_aluminumalloy.asset"),
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_hull_carbonfiber.asset"),
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_hull_radarabsorbentmaterial.asset"),
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_hull_titaniumalloy.asset"),
-                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propulsion_ice_basic.asset"),
-                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_engine_ice_basic.asset"),
+                // TN_2B_drone_propulsion_ice_basic/engine_ice_basic, ..._jet_subsonic,
+                // and ..._jet_supersonic were retired by Phase3IPropulsionMergeSeeder in
+                // favor of the 3 merged TN_3I_package_* nodes below (see its own doc
+                // comment) — Electric's own TN_06/TN_07 unlock path is unchanged.
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_fuel_petrol_basic.asset"),
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_fuel_diesel_basic.asset"),
-                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propulsion_jet_subsonic.asset"),
-                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_engine_jet_subsonic.asset"),
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_fuel_jetfuel_basic.asset"),
-                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_propulsion_jet_supersonic.asset"),
-                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_engine_jet_supersonic.asset"),
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_weaponbay_large.asset"),
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2B_drone_weaponbay_internalmedium.asset"),
                 // Phase 2C guidance depth — seeded by Phase2CGuidanceDepthSeeder.
                 Load<TechNode>("Assets/_Project/Data/TechTree/TN_2C_support_datalink_midcourserelay.asset"),
+                // Phase 3H planform presets — seeded by Phase3HPlanformSeeder.SeedPlanformTechNodes().
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_3H_planform_twintailfighter.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_3H_planform_crankedkiterecon.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_3H_planform_flyingwingstealth.asset"),
+                // Phase 3I propulsion packages — seeded by Phase3IPropulsionMergeSeeder.SeedPackageTechNodes().
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_3I_package_ice.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_3I_package_jetsubsonic.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_3I_package_jetsupersonic.asset"),
+                // Phase 2A missile airframe tiers — seeded by Phase2AMissileBreadthSeeder.SeedTechTreeNodes().
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2A_missile_airframe_interceptor.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2A_missile_airframe_heavystrike.asset"),
+                Load<TechNode>("Assets/_Project/Data/TechTree/TN_2A_missile_airframe_hypersonic.asset"),
             };
 
-            workshop.missileAirframe = Load<MissileAirframeDefinition>("Assets/_Project/Data/Missiles/Airframe_Basic.asset");
             workshop.missileFuel = Load<FuelDefinition>("Assets/_Project/Data/Shared/Fuel_Solid_Basic.asset");
+
+            workshop.missileAirframeOptions = new[]
+            {
+                Load<MissileAirframeDefinition>("Assets/_Project/Data/Missiles/Airframe_Basic.asset"),
+                Load<MissileAirframeDefinition>("Assets/_Project/Data/Missiles/Airframe_Interceptor.asset"),
+                Load<MissileAirframeDefinition>("Assets/_Project/Data/Missiles/Airframe_HeavyStrike.asset"),
+                Load<MissileAirframeDefinition>("Assets/_Project/Data/Missiles/Airframe_Hypersonic.asset"),
+            };
 
             workshop.missileEngineOptions = new[]
             {
@@ -208,12 +241,27 @@ namespace Vanquish.EditorTools
             workshop.droneSensorBasic = Load<SensorSuiteDefinition>("Assets/_Project/Data/Drones/Sensor_Basic.asset");
             workshop.droneSensorScout = Load<SensorSuiteDefinition>("Assets/_Project/Data/Drones/Sensor_Scout.asset");
 
+            workshop.droneSensorOptions = new[]
+            {
+                Load<SensorSuiteDefinition>("Assets/_Project/Data/Drones/Sensor_Basic.asset"),
+                Load<SensorSuiteDefinition>("Assets/_Project/Data/Drones/Sensor_Radar_Advanced.asset"),
+                Load<SensorSuiteDefinition>("Assets/_Project/Data/Drones/Sensor_Radar_LongRange.asset"),
+            };
+
             workshop.dronePropulsionOptions = new[]
             {
                 Load<PropulsionDefinition>("Assets/_Project/Data/Drones/Propulsion_Electric_Basic.asset"),
                 Load<PropulsionDefinition>("Assets/_Project/Data/Drones/Propulsion_ICE_Basic.asset"),
                 Load<PropulsionDefinition>("Assets/_Project/Data/Drones/Propulsion_Jet_Subsonic.asset"),
                 Load<PropulsionDefinition>("Assets/_Project/Data/Drones/Propulsion_Jet_Supersonic.asset"),
+            };
+
+            workshop.dronePropulsionPackageOptions = new[]
+            {
+                Load<DronePropulsionPackageDefinition>("Assets/_Project/Data/Drones/Package_Electric.asset"),
+                Load<DronePropulsionPackageDefinition>("Assets/_Project/Data/Drones/Package_InternalCombustion.asset"),
+                Load<DronePropulsionPackageDefinition>("Assets/_Project/Data/Drones/Package_SubsonicJet.asset"),
+                Load<DronePropulsionPackageDefinition>("Assets/_Project/Data/Drones/Package_SupersonicJet.asset"),
             };
 
             workshop.droneAirframeOptions = new[]
@@ -237,9 +285,22 @@ namespace Vanquish.EditorTools
                 Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Propeller_Metal_Small.asset"),
                 Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Propeller_Metal_Medium.asset"),
                 Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Propeller_Metal_Large.asset"),
-                Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Wing_FixedWing.asset"),
+                // Wing_FixedWing was retired by Phase3HPlanformSeeder (superseded by the
+                // merged Planform picker — see its own doc comment); Wing_DeltaWing/
+                // VariableSweepWing/FlyingWingKite are still real assets, just no longer
+                // reachable through this raw dropdown for fixed-wing designs (only via
+                // dronePlanformOptions below) — kept here as harmless, Multirotor-filtered
+                // entries rather than removed, since a future part could still want them.
                 Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Wing_DeltaWing.asset"),
                 Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Wing_VariableSweepWing.asset"),
+                Load<WingOrPropellerDefinition>("Assets/_Project/Data/Drones/Wing_FlyingWingKite.asset"),
+            };
+
+            workshop.dronePlanformOptions = new[]
+            {
+                Load<DronePlanformDefinition>("Assets/_Project/Data/Drones/Planform_TwinTailFighter.asset"),
+                Load<DronePlanformDefinition>("Assets/_Project/Data/Drones/Planform_CrankedKiteRecon.asset"),
+                Load<DronePlanformDefinition>("Assets/_Project/Data/Drones/Planform_FlyingWingStealth.asset"),
             };
 
             workshop.droneHullOptions = new[]
@@ -287,6 +348,125 @@ namespace Vanquish.EditorTools
             EditorSceneManager.SaveScene(scene, ScenePath);
 
             Debug.Log($"[Phase1WorkshopSceneBuilder] Scene built and saved to {ScenePath}");
+        }
+
+        /// <summary>
+        /// Phase 3B: the preview "stage" — a root positioned far from the rest of the
+        /// scene (belt-and-suspenders alongside the layer-based camera culling below;
+        /// distance alone was the old missile-visibility convention's approach and
+        /// isn't relied on solely here) holding a rotating modelPivot child that
+        /// WorkshopPreviewStage spins/rebuilds, plus a small key light so the preview
+        /// isn't lit only by whatever ambient/skybox lighting the rest of the scene
+        /// happens to have.
+        /// </summary>
+        private static WorkshopPreviewStage BuildPreviewStage(int previewLayer)
+        {
+            var stageGo = new GameObject("WorkshopPreviewStage");
+            stageGo.transform.position = new Vector3(0f, -500f, 0f);
+            stageGo.layer = previewLayer;
+
+            var pivotGo = new GameObject("ModelPivot");
+            pivotGo.transform.SetParent(stageGo.transform, worldPositionStays: false);
+            pivotGo.transform.localPosition = Vector3.zero;
+            pivotGo.layer = previewLayer;
+
+            // Phase 3B follow-up: a single directional key light isn't enough to make
+            // hull-material finish differences (TeamColorUtility's metallic/smoothness
+            // variation per HullMaterialType) actually read — PBR "metallic" look
+            // mostly comes from reflected environment light, and this isolated stage
+            // has no skybox/reflection probe at all, so a metallic material with only
+            // one direct light looks almost as flat/dark as a matte one. A dim dark-
+            // blue rim/fill light from the opposite side plus scene-wide flat ambient
+            // light (set on RenderSettings below, in BuildScene) gives every material
+            // enough indirect-feeling light to actually show metallic vs. matte
+            // contrast, without needing a full reflection probe setup.
+            var keyLightGo = new GameObject("PreviewKeyLight");
+            keyLightGo.transform.SetParent(stageGo.transform, worldPositionStays: false);
+            keyLightGo.transform.rotation = Quaternion.Euler(45f, -30f, 0f);
+            var keyLight = keyLightGo.AddComponent<Light>();
+            keyLight.type = LightType.Directional;
+            keyLight.intensity = 1.3f;
+            keyLight.cullingMask = 1 << previewLayer;
+
+            var fillLightGo = new GameObject("PreviewFillLight");
+            fillLightGo.transform.SetParent(stageGo.transform, worldPositionStays: false);
+            fillLightGo.transform.rotation = Quaternion.Euler(25f, 150f, 0f);
+            var fillLight = fillLightGo.AddComponent<Light>();
+            fillLight.type = LightType.Directional;
+            fillLight.intensity = 0.6f;
+            fillLight.color = new Color(0.75f, 0.82f, 1f);
+            fillLight.cullingMask = 1 << previewLayer;
+
+            var stage = stageGo.AddComponent<WorkshopPreviewStage>();
+            stage.modelPivot = pivotGo.transform;
+            return stage;
+        }
+
+        /// <summary>
+        /// The preview camera: perspective, culled to only PreviewLayerName (so it
+        /// renders nothing else in the scene regardless of the stage's distance from
+        /// the rest of it), targeting the RenderTexture WorkshopController displays in
+        /// Workshop.uxml's "design-preview-viewport" Image element. Sits on a small
+        /// "CameraRig" child of the stage root (not the stage root itself) so
+        /// WorkshopPreviewStage.Zoom can dolly it along local Z independent of the
+        /// model pivot's own rotation.
+        /// </summary>
+        private static void WireUpPreviewCamera(WorkshopPreviewStage stage, int previewLayer, RenderTexture renderTexture)
+        {
+            // Planform-preset pass: distance/height match WorkshopPreviewStage's
+            // DroneFramingDistance/DroneFramingHeight defaults (20f/8f, up from 12f/5f
+            // — same ~22-degree downward angle, just backed off further so the largest
+            // curated planform, Flying-Wing Stealth at ~14m span, is framed with margin
+            // instead of nearly filling the frame). Keep these two in sync.
+            var rigGo = new GameObject("CameraRig");
+            rigGo.transform.SetParent(stage.transform, worldPositionStays: false);
+            rigGo.transform.localPosition = new Vector3(0f, 8f, -20f);
+            rigGo.transform.LookAt(stage.transform.position + Vector3.up * 0.3f);
+
+            var camGo = new GameObject("PreviewCamera");
+            camGo.transform.SetParent(rigGo.transform, worldPositionStays: false);
+            camGo.transform.localPosition = Vector3.zero;
+            camGo.transform.localRotation = Quaternion.identity;
+
+            var camera = camGo.AddComponent<Camera>();
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = new Color(0.08f, 0.09f, 0.11f);
+            camera.cullingMask = 1 << previewLayer;
+            camera.targetTexture = renderTexture;
+            camera.fieldOfView = 35f;
+            camera.nearClipPlane = 0.1f;
+            // Planform-preset pass: raised from 45f — at maxZoomDistance (40f, also
+            // raised) plus a ~16m-long object, 45f would clip through the far side of
+            // the model when fully zoomed out.
+            camera.farClipPlane = 70f;
+            // No AudioListener — the Background Camera already owns the scene's one
+            // AudioListener; a second one would log a Unity warning.
+
+            stage.cameraRig = rigGo.transform;
+        }
+
+        /// <summary>
+        /// Loads the shared preview RenderTexture asset, or creates it the first time
+        /// this scene is built — same "create-once, reuse" convention as
+        /// GetOrCreatePanelSettings. 512x512 is plenty for a UI-embedded viewport of
+        /// this size; higher would just cost more GPU time re-rendering every frame
+        /// for no visible benefit.
+        /// </summary>
+        private static RenderTexture GetOrCreatePreviewRenderTexture()
+        {
+            var existing = AssetDatabase.LoadAssetAtPath<RenderTexture>(PreviewRenderTexturePath);
+            if (existing != null)
+                return existing;
+
+            var renderTexture = new RenderTexture(512, 512, 16, RenderTextureFormat.ARGB32)
+            {
+                name = "WorkshopPreviewRT",
+                antiAliasing = 2,
+            };
+            AssetDatabase.CreateAsset(renderTexture, PreviewRenderTexturePath);
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[Phase1WorkshopSceneBuilder] Created new RenderTexture asset at {PreviewRenderTexturePath}");
+            return renderTexture;
         }
 
         private static T Load<T>(string path) where T : UnityEngine.Object

@@ -47,16 +47,25 @@ namespace Vanquish.Simulation.Sensors
 
         /// <summary>
         /// Attempts to deploy one decoy charge. Always consumes a charge if any remain
-        /// (a used decoy is used, win or lose) and rolls decoySuccessChance to decide
-        /// whether it actually spoofs the lock. Returns true if the lock should break.
+        /// (a used decoy is used, win or lose) and rolls decoySuccessChance — scaled by
+        /// `attackerSusceptibility` (SeekerDefinition.countermeasureSusceptibility, 0-1,
+        /// default 1) — to decide whether it actually spoofs the lock. Depth pass
+        /// (direct user feedback: "I can't tell if countermeasures do anything, so
+        /// they probably don't"): before this parameter existed, a decoy's success was
+        /// determined purely by the DEFENDER's own decoySuccessChance, with zero regard
+        /// for what seeker was actually inbound — a top-tier Multi-Spectral seeker
+        /// (countermeasureSusceptibility ~0.1) and a basic IR seeker (~0.7) were
+        /// equally easy to spoof by the same flare. Returns true if the lock should
+        /// break.
         /// </summary>
-        public bool TryDeployDecoy()
+        public bool TryDeployDecoy(float attackerSusceptibility = 1f)
         {
             if (decoyChargesRemaining <= 0)
                 return false;
 
             decoyChargesRemaining--;
-            return Random.value < decoySuccessChance;
+            float effectiveChance = Mathf.Clamp01(decoySuccessChance * attackerSusceptibility);
+            return Random.value < effectiveChance;
         }
 
         /// <summary>
@@ -65,13 +74,13 @@ namespace Vanquish.Simulation.Sensors
         /// safe to call every physics tick a missile is locked on without needing the
         /// caller to track timing itself.
         /// </summary>
-        public bool TryAutoDeployDecoy()
+        public bool TryAutoDeployDecoy(float attackerSusceptibility = 1f)
         {
             if (_autoDeployCooldownTimer > 0f)
                 return false;
 
             _autoDeployCooldownTimer = autoDeployCooldownSeconds;
-            return TryDeployDecoy();
+            return TryDeployDecoy(attackerSusceptibility);
         }
     }
 }

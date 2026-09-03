@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 34d9d5232ba633e4aaf3d1ebb1dd29ca, type: 3}
+  m_Name: Planform_CrankedKiteRecon
+  m_EditorClassIdentifier: 
+  id: drone_planform_crankedkiterecon
+  displayName: Cranked-Kite Recon Planform
+  description: "A broader twin-tail blended-wing-body airframe between the fighter
+    and the flying wing in scale \u2014 a modular recon/strike CCA hull with a swept
+    cranked wing."
+  icon: {fileID: 0}
+  airframe: {fileID: 11400000, guid: d1a43ecdb83dd0840824b8e38325e5c2, type: 2}
+  wing: {fileID: 11400000, guid: 201c8496aa725724e8d7feed00a22f7b, type: 2}

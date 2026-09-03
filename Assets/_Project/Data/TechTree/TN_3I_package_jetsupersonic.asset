@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5838be6bb0ec882449e47b85b92859ee, type: 3}
+  m_Name: TN_3I_package_jetsupersonic
+  m_EditorClassIdentifier: 
+  id: TN_3I_package_jetsupersonic
+  displayName: Supersonic Jet Package
+  description: 
+  tier: 4
+  researchCost: 340
+  prerequisites:
+  - {fileID: 11400000, guid: fde3688ad657f9d428f0b3571a4cfe6a, type: 2}
+  unlocks:
+  - {fileID: 11400000, guid: 0780e5f6dce872047846b612259460e0, type: 2}
+  - {fileID: 11400000, guid: c5d5270f611833f4caf7255841383619, type: 2}
+  graphPosition: {x: 0, y: 0}

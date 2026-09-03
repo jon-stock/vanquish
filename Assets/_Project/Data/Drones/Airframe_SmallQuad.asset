@@ -30,3 +30,5 @@ MonoBehaviour:
   baseRadarCrossSection: 0.3
   rotorCount: 4
   maxTakeOffMassKg: 180
+  wingSpanMeters: 6
+  fuselageLengthMeters: 4

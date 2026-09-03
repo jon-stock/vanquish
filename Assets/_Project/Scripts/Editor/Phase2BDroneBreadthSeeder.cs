@@ -189,32 +189,88 @@ namespace Vanquish.EditorTools
             });
         }
 
+        /// <summary>
+        /// Depth pass (direct user feedback: "there's no radar option, so the sensor
+        /// stat is always stuck as the limiting factor for missiles"): only two
+        /// sensor suites ever existed (Sensor_Basic, 1500m; Sensor_Scout, 4000m —
+        /// both Tier 0), and the strike drone's own sensor was hardcoded to always
+        /// use Sensor_Basic regardless of what was unlocked (see
+        /// WorkshopController.TryBuildDroneLoadout, now fixed alongside this). Since
+        /// seeded missile seekers reach 1500-9000m, a 1500m sensor made a strike
+        /// drone's own detection the bottleneck against almost every seeker tier —
+        /// these two proper radar upgrades (Tier2/Tier4) give a real choice that can
+        /// actually out-range mid/high-tier seekers instead of always losing that race.
+        /// </summary>
+        [MenuItem("Vanquish/Phase 2B/Seed Drone Sensor Variants")]
+        public static void SeedSensorVariants()
+        {
+            EnsureDir(DronesDir);
+
+            CreateOrReplace<SensorSuiteDefinition>($"{DronesDir}/Sensor_Radar_Advanced.asset", s =>
+            {
+                s.id = "drone_sensor_radar_advanced";
+                s.displayName = "Advanced Pulse-Doppler Radar";
+                s.category = PartCategory.DroneSensorSuite;
+                s.tier = TechTier.Tier2_Advanced;
+                s.researchCost = 170;
+                s.buildCost = 110;
+                s.massKg = 2.5f;
+                s.radarRangeMeters = 6000f;
+                s.radarFieldOfViewDegrees = 120f;
+                s.eoIrRangeMeters = 3500f;
+                s.eoIrFieldOfViewDegrees = 60f;
+                s.esmRangeMeters = 2500f;
+                s.sharesContactsWithTeam = false;
+                s.datalinkRelayDelaySeconds = 0f;
+            });
+
+            CreateOrReplace<SensorSuiteDefinition>($"{DronesDir}/Sensor_Radar_LongRange.asset", s =>
+            {
+                s.id = "drone_sensor_radar_longrange";
+                s.displayName = "Long-Range AESA Radar";
+                s.category = PartCategory.DroneSensorSuite;
+                s.tier = TechTier.Tier4_Hypersonic;
+                s.researchCost = 320;
+                s.buildCost = 220;
+                s.massKg = 4f;
+                // Comfortably out-ranges even the longest-reaching seeded seeker
+                // (Seeker_MultiSpectral, 9000m) — a real reason to pick this over
+                // always being outranged by your own missiles.
+                s.radarRangeMeters = 10000f;
+                s.radarFieldOfViewDegrees = 140f;
+                s.eoIrRangeMeters = 5000f;
+                s.eoIrFieldOfViewDegrees = 60f;
+                s.esmRangeMeters = 4000f;
+                s.sharesContactsWithTeam = false;
+                s.datalinkRelayDelaySeconds = 0f;
+            });
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.Log("[Phase2BDroneBreadthSeeder] Seeded Advanced Pulse-Doppler Radar and Long-Range AESA Radar " +
+                "sensor variants under Assets/_Project/Data/Drones/ (Sensor_Basic from Phase1DataSeeder covers " +
+                "the Tier-0 baseline). Not yet wired into the tech tree or Workshop picker — see class comment.");
+        }
+
         [MenuItem("Vanquish/Phase 2B/Seed Drone Wing Type Variants")]
         public static void SeedWingTypeVariants()
         {
             EnsureDir(DronesDir);
 
-            // FixedWing: straight wing — best low-speed lift/handling, least maneuverable
-            // of the three, cheapest.
-            CreateOrReplace<WingOrPropellerDefinition>($"{DronesDir}/Wing_FixedWing.asset", w =>
-            {
-                w.id = "drone_wing_fixedwing";
-                w.displayName = "Fixed Wing";
-                w.category = PartCategory.DroneWingOrPropeller;
-                w.tier = TechTier.Tier1_Guided;
-                w.researchCost = 90;
-                w.buildCost = 55;
-                w.massKg = 3f;
-                w.liftSurfaceType = LiftSurfaceType.FixedWing;
-                w.liftCoefficient = 1.4f;
-                w.dragCoefficient = 0.05f;
-                w.turnRateDegreesPerSecond = 60f;
-                w.cruiseEfficiencyMultiplier = 1.2f;
-            });
+            // FixedWing (plain straight wing) was retired by Phase3HPlanformSeeder,
+            // which deletes Wing_FixedWing.asset entirely — the planform-preset pass
+            // curates exactly one wing per airframe class instead of a free
+            // cross-product, and the straight wing wasn't chosen for any of the three
+            // curated planforms. No longer seeded here; do not re-add without also
+            // updating Phase3HPlanformSeeder's retirement logic.
 
             // DeltaWing: less low-speed lift than a straight wing but far more
             // maneuverable and lower drag at speed — the classic speed/agility vs.
-            // low-speed-handling trade.
+            // low-speed-handling trade. Fixed-wing flight-model rework: a real delta
+            // planform's vortex lift lets it fly to a much higher angle of attack
+            // before conventionally stalling than a straight wing (criticalAoADegrees
+            // 28 vs. FixedWing's 15) — this is what "far more maneuverable" now
+            // concretely means under the real AoA model, not just a turnRate number.
             CreateOrReplace<WingOrPropellerDefinition>($"{DronesDir}/Wing_DeltaWing.asset", w =>
             {
                 w.id = "drone_wing_deltawing";
@@ -229,6 +285,10 @@ namespace Vanquish.EditorTools
                 w.dragCoefficient = 0.035f;
                 w.turnRateDegreesPerSecond = 110f;
                 w.cruiseEfficiencyMultiplier = 1.1f;
+                w.zeroLiftAoADegrees = -1f;
+                w.referenceAoADegrees = 8f;
+                w.criticalAoADegrees = 28f;
+                w.inducedDragFactor = 0.015f;
             });
 
             // VariableSweepWing: mechanically adjusts sweep angle in flight (Phase 1
@@ -236,6 +296,10 @@ namespace Vanquish.EditorTools
             // block rather than a real in-flight sweep state machine) — best
             // maneuverability AND good cruise efficiency, at the highest mass/cost of
             // the three, matching the real-world complexity/cost of swing-wing designs.
+            // Fixed-wing flight-model rework: splits the difference between FixedWing's
+            // forgiving-but-limited stall margin and DeltaWing's huge one, and pays the
+            // least induced drag of the three (the "good cruise efficiency" half of its
+            // description) rather than only DeltaWing beating it on drag.
             CreateOrReplace<WingOrPropellerDefinition>($"{DronesDir}/Wing_VariableSweepWing.asset", w =>
             {
                 w.id = "drone_wing_variablesweepwing";
@@ -250,6 +314,10 @@ namespace Vanquish.EditorTools
                 w.dragCoefficient = 0.03f;
                 w.turnRateDegreesPerSecond = 130f;
                 w.cruiseEfficiencyMultiplier = 1.25f;
+                w.zeroLiftAoADegrees = -2f;
+                w.referenceAoADegrees = 6f;
+                w.criticalAoADegrees = 20f;
+                w.inducedDragFactor = 0.012f;
             });
 
             AssetDatabase.SaveAssets();
@@ -449,10 +517,21 @@ namespace Vanquish.EditorTools
                 e.researchCost = 170;
                 e.buildCost = 110;
                 e.massKg = 9f;
-                e.powerOutput = 3200f;
+                // Fix (direct user feedback: "max speed is low for supersonic engine",
+                // same underlying issue here too): top speed in this sim is whatever
+                // speed makes thrust == quadratic drag, not a directly-set number —
+                // 3200N against a ~0.095-0.072 combined airframe+wing dragCoefficient
+                // range only reached ~180-210 m/s, nowhere near a genuine subsonic-jet
+                // cruise speed. Raised so equilibrium lands around 250-290 m/s
+                // (still comfortably below Mach 1, ~343 m/s, matching "Subsonic").
+                e.powerOutput = 6000f;
                 e.consumptionRatePerSecond = 4f;
                 e.infraredSignature = 1.8f;
                 e.reliability = 0.9f;
+                // Fixed-wing flight-model rework: engines had no field tying them to a
+                // flight model at all before this — see DroneEngineDefinition.requiresForwardFlight's
+                // own doc comment for why that was a real compatibility gap.
+                e.requiresForwardFlight = true;
             });
 
             // ---- Supersonic Jet: highest tier drone propulsion. ----
@@ -482,10 +561,19 @@ namespace Vanquish.EditorTools
                 e.researchCost = 340;
                 e.buildCost = 230;
                 e.massKg = 14f;
-                e.powerOutput = 6500f;
-                e.consumptionRatePerSecond = 8f;
+                // Fix (direct user feedback: "max speed is low (300m/s) for supersonic
+                // engine"): equilibrium speed (thrust == quadratic drag) with the old
+                // 6500N only reached ~260-300 m/s regardless of the seeded
+                // maxSpeedMetersPerSecond=620 stat (that stat has never actually been
+                // enforced anywhere — see the Propulsion+Engine merge's own notes on
+                // dead fields). Raised to reach a genuinely supersonic equilibrium
+                // (~460-530 m/s, comfortably above Mach 1) across every planform's
+                // drag range instead of stalling out just shy of the sound barrier.
+                e.powerOutput = 20000f;
+                e.consumptionRatePerSecond = 10f;
                 e.infraredSignature = 3.5f;
                 e.reliability = 0.88f;
+                e.requiresForwardFlight = true;
             });
 
             CreateOrReplace<FuelDefinition>($"{SharedDir}/Fuel_JetFuel_Basic.asset", f =>
@@ -530,6 +618,7 @@ namespace Vanquish.EditorTools
                 w.massKg = 2.5f;
                 w.payloadCapacityKg = 60f;
                 w.maxMunitionCount = 8;
+                w.internalCapacity = 0; // purely external
                 w.isInternal = false;
                 w.cycleTimeSeconds = 2.5f;
             });
@@ -547,7 +636,15 @@ namespace Vanquish.EditorTools
                 w.buildCost = 130;
                 w.massKg = 3f;
                 w.payloadCapacityKg = 40f;
+                // Depth pass (direct user feedback: "internal bay should always be used
+                // first, then pylons after — affecting RCS"): a mixed bay rather than
+                // purely internal — the first 4 rounds ride hidden with zero RCS
+                // contribution, exactly like before; a design that actually carries more
+                // than that spills the extra 2 onto external pylons (visibly mounted,
+                // adding RCS), instead of the old "isInternal=true means the ENTIRE
+                // loadout is invisible/free no matter how much ammo" behavior.
                 w.maxMunitionCount = 6;
+                w.internalCapacity = 4;
                 w.isInternal = true;
                 w.cycleTimeSeconds = 3f;
             });
@@ -597,15 +694,12 @@ namespace Vanquish.EditorTools
                 return;
             }
 
-            // ---- Airframes: Hexacopter and Fixed-Wing both branch directly off the
-            // Tier-0 drone basics node (alternative Tier 0/1 airframe philosophies, not
-            // upgrades of each other); Flying-Wing Stealth upgrades from Fixed-Wing;
-            // CCA-Scale upgrades from Flying-Wing Stealth — matching their increasing
-            // seeded tiers (1, 1, 3, 4). ----
+            // ---- Airframes: Hexacopter branches directly off the Tier-0 drone basics
+            // node. Fixed-Wing/FlyingWingStealth/CcaScale individually unlockable
+            // TechNodes were retired by Phase3HPlanformSeeder — those three airframes
+            // are now unlocked only as part of a merged Planform preset (airframe+wing
+            // together, see TN_3H_planform_* nodes) rather than standalone. ----
             CreatePartTechNode(LoadPart<DroneAirframeDefinition>("Airframe_SmallHexa"), tnDroneBasics);
-            var tnFixedWingAirframe = CreatePartTechNode(LoadPart<DroneAirframeDefinition>("Airframe_FixedWing"), tnDroneBasics);
-            var tnStealthAirframe = CreatePartTechNode(LoadPart<DroneAirframeDefinition>("Airframe_FlyingWingStealth"), tnFixedWingAirframe);
-            CreatePartTechNode(LoadPart<DroneAirframeDefinition>("Airframe_CcaScale"), tnStealthAirframe);
 
             // ---- Rotors: all 9 Material x Size combinations branch directly off the
             // Tier-0 drone structure node — they're alternative Tier-0 choices (material/
@@ -619,11 +713,11 @@ namespace Vanquish.EditorTools
                 }
             }
 
-            // ---- Wing types: Fixed Wing -> Delta Wing -> Variable-Sweep Wing, matching
-            // their increasing seeded tiers (1, 2, 3). ----
-            var tnFixedWing = CreatePartTechNode(LoadPart<WingOrPropellerDefinition>("Wing_FixedWing"), tnDroneStructure);
-            var tnDeltaWing = CreatePartTechNode(LoadPart<WingOrPropellerDefinition>("Wing_DeltaWing"), tnFixedWing);
-            CreatePartTechNode(LoadPart<WingOrPropellerDefinition>("Wing_VariableSweepWing"), tnDeltaWing);
+            // ---- Wing types: Fixed Wing (and its TechNode) was retired by
+            // Phase3HPlanformSeeder; Delta Wing/Variable-Sweep Wing are no longer
+            // individually unlockable either — both are now only unlocked as part of a
+            // merged Planform preset (see TN_3H_planform_* nodes). Neither is seeded
+            // standalone here anymore. ----
 
             // ---- Hull materials: Aluminum Alloy -> Carbon Fiber -> RAM -> Titanium,
             // matching their increasing seeded tiers (1, 2, 3, 4). ----
@@ -632,20 +726,15 @@ namespace Vanquish.EditorTools
             var tnRam = CreatePartTechNode(LoadPart<HullMaterialDefinition>("Hull_RadarAbsorbentMaterial"), tnCarbonFiber);
             CreatePartTechNode(LoadPart<HullMaterialDefinition>("Hull_TitaniumAlloy"), tnRam);
 
-            // ---- Propulsion/engine/fuel: ICE and Jet Subsonic both branch directly off
-            // the Tier-0 base nodes (alternative Tier-1/2 propulsion philosophies); Jet
-            // Supersonic upgrades from Jet Subsonic, matching their seeded tiers. ----
-            CreatePartTechNode(LoadPart<PropulsionDefinition>("Propulsion_ICE_Basic"), tnDroneBasics);
-            CreatePartTechNode(LoadPart<DroneEngineDefinition>("Engine_ICE_Basic"), tnDronePower);
+            // ---- Fuel: Petrol/Diesel/Jet Fuel branch off the Tier-0 drone power node. ----
+            // Note: the individual ICE/Jet-Subsonic/Jet-Supersonic Propulsion+Engine
+            // TechNodes that used to live here were retired by
+            // Phase3IPropulsionMergeSeeder in favor of 3 merged TN_3I_package_* nodes
+            // (see its own doc comment) — do not re-add them here, or re-running this
+            // method will silently resurrect the retired individual unlock paths.
             CreatePartTechNode(LoadPart<FuelDefinition>("Fuel_Petrol_Basic", SharedDir), tnDronePower);
             CreatePartTechNode(LoadPart<FuelDefinition>("Fuel_Diesel_Basic", SharedDir), tnDronePower);
-
-            var tnJetSubsonicPropulsion = CreatePartTechNode(LoadPart<PropulsionDefinition>("Propulsion_Jet_Subsonic"), tnDroneBasics);
-            var tnJetSubsonicEngine = CreatePartTechNode(LoadPart<DroneEngineDefinition>("Engine_Jet_Subsonic"), tnDronePower);
             CreatePartTechNode(LoadPart<FuelDefinition>("Fuel_JetFuel_Basic", SharedDir), tnDronePower);
-
-            CreatePartTechNode(LoadPart<PropulsionDefinition>("Propulsion_Jet_Supersonic"), tnJetSubsonicPropulsion);
-            CreatePartTechNode(LoadPart<DroneEngineDefinition>("Engine_Jet_Supersonic"), tnJetSubsonicEngine);
 
             // ---- Weapon bays: Large (external) branches off the Tier-0 drone systems
             // node; Internal Medium upgrades from Large, matching their seeded tiers
@@ -653,11 +742,22 @@ namespace Vanquish.EditorTools
             var tnLargeBay = CreatePartTechNode(LoadPart<WeaponBayDefinition>("WeaponBay_Large"), tnDroneSystems);
             CreatePartTechNode(LoadPart<WeaponBayDefinition>("WeaponBay_InternalMedium"), tnLargeBay);
 
+            // ---- Sensors: Advanced Radar branches off the Tier-0 drone systems node;
+            // Long-Range AESA upgrades from Advanced Radar. ----
+            var tnAdvancedRadar = CreatePartTechNode(LoadPart<SensorSuiteDefinition>("Sensor_Radar_Advanced"), tnDroneSystems);
+            CreatePartTechNode(LoadPart<SensorSuiteDefinition>("Sensor_Radar_LongRange"), tnAdvancedRadar);
+
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Debug.Log("[Phase2BDroneBreadthSeeder] Seeded 31 TechNodes (TN_2B_*) gating the Phase 2B drone " +
-                "breadth variants under Assets/_Project/Data/TechTree/. Re-run Vanquish/Phase 1/Build Workshop " +
-                "Scene to pick these up in WorkshopController's tech tree list and drone part picker.");
+            Debug.Log("[Phase2BDroneBreadthSeeder] Seeded 21 TechNodes (TN_2B_*) gating the Phase 2B drone " +
+                "breadth variants under Assets/_Project/Data/TechTree/ (10 fewer than the original 31 — the " +
+                "individual Fixed-Wing/Flying-Wing Stealth/CCA-Scale airframe and Fixed/Delta/Variable-Sweep " +
+                "Wing TechNodes were retired by Phase3HPlanformSeeder in favor of 3 merged Planform TechNodes, " +
+                "and the individual ICE/Jet-Subsonic/Jet-Supersonic Propulsion+Engine TechNodes were retired by " +
+                "Phase3IPropulsionMergeSeeder in favor of 3 merged Propulsion Package TechNodes; +2 new Sensor " +
+                "TechNodes this pass). " +
+                "Re-run Vanquish/Phase 1/Build Workshop Scene to pick these up in WorkshopController's tech " +
+                "tree list and drone part picker.");
         }
 
         private static TechNode LoadNode(string assetName)

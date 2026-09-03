@@ -61,6 +61,9 @@ namespace Vanquish.EditorTools
                 e.burnTimeSeconds = 6f;
                 e.maxSpeedMetersPerSecond = 250f;
                 e.infraredSignature = 1.5f;
+                // A short, violent solid-rocket boost tolerates harder corrections than a
+                // sustained-cruise design — see MissileEngineDefinition.maneuverabilityMultiplier.
+                e.maneuverabilityMultiplier = 1.15f;
             });
 
             var missileSeeker = CreateOrReplace<SeekerDefinition>($"{MissilesDir}/Seeker_IR_Basic.asset", s =>
@@ -205,7 +208,11 @@ namespace Vanquish.EditorTools
                 w.tier = TechTier.Tier0_Improvised;
                 w.massKg = 1f;
                 w.payloadCapacityKg = 20f;
-                w.maxMunitionCount = 4;
+                // Depth pass (direct user feedback: "smaller craft should be able to
+                // store fewer missiles"): was 4, matching the Tier1 Large bay exactly —
+                // a Tier-0 starter bay shouldn't carry as much as its own upgrade.
+                w.maxMunitionCount = 2;
+                w.internalCapacity = 0; // purely external — every round mounts visibly and adds RCS
                 w.isInternal = false;
                 w.cycleTimeSeconds = 2f;
             });

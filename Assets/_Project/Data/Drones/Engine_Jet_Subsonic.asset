@@ -22,7 +22,8 @@ MonoBehaviour:
   buildCost: 110
   massKg: 9
   prerequisites: []
-  powerOutput: 3200
+  powerOutput: 6000
   consumptionRatePerSecond: 4
   infraredSignature: 1.8
   reliability: 0.9
+  requiresForwardFlight: 1

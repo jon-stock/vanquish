@@ -6,9 +6,10 @@ using Vanquish.Data.Scenarios;
 namespace Vanquish.EditorTools
 {
     /// <summary>
-    /// Seeds the ScenarioDefinition assets ScenarioPickerOverlay lists in the Workshop
-    /// scene. One per combat scene currently reachable: the original flat Phase 1 MVP
-    /// arena, plus the two new Phase 2E terrain arenas.
+    /// Seeds the ScenarioDefinition assets WorkshopController's in-UI scenario picker
+    /// (Phase 3A; was ScenarioPickerOverlay pre-3A) lists in the Workshop scene. One
+    /// per combat scene currently reachable: the original flat Phase 1 MVP arena, plus
+    /// the two new Phase 2E terrain arenas.
     /// </summary>
     public static class Phase2EScenarioSeeder
     {

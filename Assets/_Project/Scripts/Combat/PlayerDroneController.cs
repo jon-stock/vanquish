@@ -24,14 +24,12 @@ namespace Vanquish.Combat
     ///   coasting.
     /// - Fixed-wing/jet (requiresForwardFlight = true): a real roll-to-turn
     ///   stick-and-throttle flight model instead of a direct yaw stick — A/D roll
-    ///   (bank), W/S pitch (climb/dive), Space/Shift throttle (add/remove forward
-    ///   thrust on top of the airframe's constant baseline cruise thrust, which
-    ///   FlightBody's own FixedUpdate keeps applying every tick regardless of this
-    ///   component). There's no direct yaw input at all — turning comes from
-    ///   banking and pulling up into the turn, same as a real aircraft (and most
-    ///   arcade flight games), which FlightBody's aerodynamic lift model (see its
-    ///   useAerodynamicLift) makes physically meaningful: lift is along
-    ///   transform.up, so banking tilts lift sideways and curves the flight path.
+    ///   (bank), W/S pitch (climb/dive), Space/Shift throttle. There's no direct yaw
+    ///   input at all — turning comes from banking and pulling up into the turn, same
+    ///   as a real aircraft (and most arcade flight games), which FlightBody's
+    ///   angle-of-attack aerodynamic lift model (see its useAerodynamicLift) makes
+    ///   physically meaningful: lift acts perpendicular to the actual relative
+    ///   airflow, so banking tilts lift sideways and curves the flight path.
     ///   Rotation is driven directly via Rigidbody.MoveRotation, and
     ///   FlightBody.alignVelocityToForward is enabled (not orientToVelocity, which
     ///   is disabled here) so the flight path gradually follows wherever the player
@@ -43,6 +41,17 @@ namespace Vanquish.Combat
     ///   orientToVelocity — see VehicleFactory/InterceptorAI), since only this
     ///   component ever sets alignVelocityToForward/disables orientToVelocity, and
     ///   only for the player's own drone.
+    ///
+    ///   Fixed-wing flight-model rework: Space/Shift now move a real throttle lever
+    ///   (FlightBody.throttleFraction, 0-1) instead of adding an ad-hoc extra force on
+    ///   top of a constant baseline thrust — FlightBody's own FixedUpdate applies
+    ///   thrustNewtons*throttleFraction every tick, so idling the throttle back
+    ///   genuinely reduces thrust rather than just removing a bonus. Roll/pitch input
+    ///   is also now scaled by ComputeControlAuthority, a function of current
+    ///   airspeed: control surfaces need airflow to work, so a slow/stalled aircraft
+    ///   is genuinely sluggish to control (not just slow to look at) — this is the
+    ///   other half of "maneuvering works correctly," alongside FlightBody's real
+    ///   stall behavior.
     /// </summary>
     [RequireComponent(typeof(FlightBody))]
     public class PlayerDroneController : MonoBehaviour
@@ -55,13 +64,22 @@ namespace Vanquish.Combat
         public float brakingForce = 80f;
 
         [Header("Fixed-wing/jet control (requiresForwardFlight = true)")]
-        [Tooltip("A/D roll (bank) rate, degrees/second.")]
+        [Tooltip("A/D roll (bank) rate, degrees/second, at full control authority (see " +
+                 "controlAuthorityReferenceSpeedMetersPerSecond) — actual rate is scaled down at low airspeed.")]
         public float rollRateDegreesPerSecond = 120f;
-        [Tooltip("W/S pitch rate, degrees/second.")]
+        [Tooltip("W/S pitch rate, degrees/second, at full control authority.")]
         public float pitchRateDegreesPerSecond = 60f;
-        [Tooltip("Space/Shift throttle: extra forward (or reverse) acceleration added on top of the " +
-                 "airframe's constant baseline thrust, m/s^2.")]
-        public float throttleAccelerationMetersPerSecondSquared = 40f;
+        [Tooltip("How fast Space/Shift move the throttle lever from idle (0) to full (1) and back, per second. " +
+                 "1.0 means a full idle-to-full-throttle sweep takes one second.")]
+        public float throttleChangeRatePerSecond = 0.6f;
+        [Tooltip("Airspeed (m/s) at which roll/pitch control authority reaches 100%. Below this, control " +
+                 "surfaces get progressively less effective (control authority scales with speed^2, matching " +
+                 "real dynamic-pressure-dependent control effectiveness) — a slow or near-stalled aircraft " +
+                 "should feel noticeably harder to steer than one at cruise speed, not just visually slower. " +
+                 "A future pass could derive this from the design's own stats (e.g. a fraction of its stall " +
+                 "speed) rather than one flat value shared by every fixed-wing design; left as a simple " +
+                 "per-controller constant for this rework.")]
+        public float controlAuthorityReferenceSpeedMetersPerSecond = 35f;
 
         private FlightBody _flightBody;
         private WeaponController _weapon;
@@ -151,10 +169,10 @@ namespace Vanquish.Combat
         /// Roll-to-turn stick-and-throttle control: A/D roll (bank), W/S pitch
         /// (climb/dive), Space/Shift throttle. Deliberately no direct yaw input —
         /// turning comes from banking + pulling into the turn, same as a real
-        /// aircraft; FlightBody's aerodynamic lift (along transform.up) is what
-        /// makes banking actually curve the flight path, combined with
-        /// alignVelocityToForward pulling the velocity vector to follow the
-        /// (rolled+pitched) nose over time. Rotation is driven directly via
+        /// aircraft; FlightBody's angle-of-attack lift model is what makes banking
+        /// actually curve the flight path (lift redirects with the banked "up" axis),
+        /// combined with alignVelocityToForward pulling the velocity vector to follow
+        /// the (rolled+pitched) nose over time. Rotation is driven directly via
         /// Rigidbody.MoveRotation rather than going through FlightBody.ApplySteering,
         /// since ApplySteering's job (velocity-chasing orientToVelocity + a lateral
         /// force) is designed for missile/AI guidance, not direct player stick
@@ -173,22 +191,54 @@ namespace Vanquish.Combat
                 if (kb.aKey.isPressed) rollInput -= 1f; // A: roll/bank left
                 if (kb.wKey.isPressed) pitchInput += 1f; // W: nose up / climb
                 if (kb.sKey.isPressed) pitchInput -= 1f; // S: nose down / dive
-                if (kb.spaceKey.isPressed) throttleInput += 1f;
-                if (kb.leftShiftKey.isPressed) throttleInput -= 1f;
+                // Fix (direct user feedback: "throttle is backwards: shift should be
+                // up"): swapped from the multirotor scheme's Space=up/Shift=down
+                // (which makes sense for vertical strafing) — a fixed-wing throttle
+                // lever is a different control than vertical movement, and Shift
+                // conventionally maps to "more power" in flight sims.
+                if (kb.leftShiftKey.isPressed) throttleInput += 1f;
+                if (kb.spaceKey.isPressed) throttleInput -= 1f;
+            }
+
+            // Real throttle lever (FlightBody.throttleFraction) instead of an ad-hoc
+            // extra force on top of constant thrust — see this field's own tooltip and
+            // the class doc comment. FlightBody's FixedUpdate is what actually applies
+            // thrustNewtons*throttleFraction every tick; this just moves the lever.
+            if (throttleInput != 0f)
+            {
+                _flightBody.throttleFraction = Mathf.Clamp01(
+                    _flightBody.throttleFraction + throttleInput * throttleChangeRatePerSecond * Time.fixedDeltaTime);
             }
 
             if (rollInput != 0f || pitchInput != 0f)
             {
-                Quaternion roll = Quaternion.AngleAxis(-rollInput * rollRateDegreesPerSecond * Time.fixedDeltaTime, transform.forward);
-                Quaternion pitch = Quaternion.AngleAxis(-pitchInput * pitchRateDegreesPerSecond * Time.fixedDeltaTime, transform.right);
+                // Control authority scales with airspeed — a stalled/slow aircraft is
+                // genuinely sluggish to steer, not just slow to look at. See
+                // ComputeControlAuthority's own doc comment.
+                float authority = ComputeControlAuthority(_rigidbody.linearVelocity.magnitude, controlAuthorityReferenceSpeedMetersPerSecond);
+                Quaternion roll = Quaternion.AngleAxis(-rollInput * rollRateDegreesPerSecond * authority * Time.fixedDeltaTime, transform.forward);
+                Quaternion pitch = Quaternion.AngleAxis(-pitchInput * pitchRateDegreesPerSecond * authority * Time.fixedDeltaTime, transform.right);
                 _rigidbody.MoveRotation(roll * pitch * _rigidbody.rotation);
             }
+        }
 
-            if (throttleInput != 0f)
-            {
-                _rigidbody.AddForce(transform.forward * (throttleInput * throttleAccelerationMetersPerSecondSquared * _rigidbody.mass),
-                    ForceMode.Force);
-            }
+        /// <summary>
+        /// Control-surface effectiveness as a function of airspeed: 0 at zero speed,
+        /// rising to 1 at referenceSpeed and clamped there (no "super-effective"
+        /// controls above cruise speed — a simplification vs. real aircraft, which
+        /// can actually over-control at very high speed, but not a concern at this
+        /// game's speed range). Scales with speed^2 (matching dynamic pressure,
+        /// q = 0.5*rho*v^2, the real physical driver of control-surface effectiveness)
+        /// rather than linearly, so the drop-off near stall speed is sharp rather than
+        /// gradual — a near-stalled aircraft should feel noticeably harder to
+        /// wrestle, not just a little softer. Pure function — headlessly testable.
+        /// </summary>
+        public static float ComputeControlAuthority(float speedMetersPerSecond, float referenceSpeedMetersPerSecond)
+        {
+            if (referenceSpeedMetersPerSecond <= 0.01f)
+                return 1f;
+            float ratio = speedMetersPerSecond / referenceSpeedMetersPerSecond;
+            return Mathf.Clamp01(ratio * ratio);
         }
 
         /// <summary>

@@ -26,3 +26,4 @@ MonoBehaviour:
   consumptionRatePerSecond: 3
   infraredSignature: 1.2
   reliability: 0.85
+  requiresForwardFlight: 0

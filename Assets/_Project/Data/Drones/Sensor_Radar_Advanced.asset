@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 93484ae7efcebac45926b18d6076bfc5, type: 3}
+  m_Name: Sensor_Radar_Advanced
+  m_EditorClassIdentifier: 
+  id: drone_sensor_radar_advanced
+  displayName: Advanced Pulse-Doppler Radar
+  description: 
+  icon: {fileID: 0}
+  category: 14
+  tier: 2
+  researchCost: 170
+  buildCost: 110
+  massKg: 2.5
+  prerequisites: []
+  radarRangeMeters: 6000
+  radarFieldOfViewDegrees: 120
+  eoIrRangeMeters: 3500
+  eoIrFieldOfViewDegrees: 60
+  esmRangeMeters: 2500
+  sharesContactsWithTeam: 0
+  datalinkRelayDelaySeconds: 0

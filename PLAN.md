@@ -1071,53 +1071,801 @@ meta-layer than a UI polish pass) and is the single largest unscoped item in thi
 ---
 
 ### Phase 3 — Balancing, Polish & Content Completion (Beta)
-**Goal:** Make the full spectrum (up to hypersonic/stealth CCA tier) playable, balanced, and polished.
+**Goal:** Make the full spectrum (up to hypersonic/stealth CCA tier) playable, balanced, and
+polished. Ordered priority for this phase, agreed ahead of implementation:
+**(3A) one connected main-scene flow tying Menu/Workshop/Test Range/Combat together, pulled
+first since it's mostly wiring existing pieces and gives every later sub-milestone a real
+loop to test through instead of ad hoc overlays → (3B) visual fidelity of designs in
+Workshop and live combat → (3C) tech tree as a real branching tree with meaningful
+trade-offs → (3D) playtesting/feel pass once 3A–3C exist to test against.** 3E/3F (top-tier
+content, art/audio, balance, campaign/tutorial, performance, QA) are the remaining
+Phase 2-era backlog items and stay last — they're cheaper and more accurate to do once the
+flow/designer/tech-tree foundations under them stop moving.
 
+Each of 3A–3C should get the same headless-verification treatment every Phase 2
+sub-milestone got (a validation script or regression run confirming the change works,
+not just "looked right in the Editor once") — that discipline shouldn't lapse just because
+3D is where the *live/manual* playtesting formally happens.
+
+---
+
+#### 3A — One Connected Flow: Menu → Workshop → Test Range → Combat
+**Goal:** Today's scenes are independently bootstrapped and jumped between via ad hoc
+overlays/menu items (`ScenarioPickerOverlay`, `TestRangeEntryOverlay`, per 2G's "ugly art
+is fine" placeholders) rather than one coherent player-facing flow. Pulled to the front of
+Phase 3 because it's mostly wiring over pieces that already work
+(`WorkshopController.EnterTestRange`, `CombatManager`'s return flow) rather than new
+rendering or data-model work — landing it first means every 3B/3C change gets tested
+through one real loop instead of the current disconnected overlays, and it's also what
+makes future scenario/campaign testing (3E, and the deferred Sandbox Campaign deep-dive)
+easier to build against.
+- [x] **Main Menu scene**: implemented as `MainMenu.unity`/`MainMenuController` (built
+  via `MainMenuSceneBuilder`), registered at build index 0. "Design Craft" is wired to
+  the Workshop; "Campaign"/"Skirmish" are shown disabled ("Coming Soon") since neither
+  has anywhere to send the player yet — see class doc comment.
+- [x] **In-UI target/scenario selection**: `ScenarioPickerOverlay`'s OnGUI panel is
+  deleted; `WorkshopController` now owns `scenarioOptions` directly and renders one
+  row per scenario (title + objective summary) inside `Workshop.uxml`'s
+  `scenario-picker-content`, highlighting the current selection.
+- [x] **Consistent return path**: every scene transition (`Enter Combat`, `Enter Test
+  Range`, `Return to Workshop` from both Combat and Test Range, plus the new escape
+  menu's "Return to Workshop") now funnels through the single `GameFlowController`
+  API rather than each call site hardcoding its own `SceneManager.LoadScene`.
+- [x] **Single persistent app-flow primitive**: implemented as `GameFlowController` —
+  a static utility (not a `DontDestroyOnLoad` singleton; there's no cross-scene state
+  to carry beyond what `PlayerProgress` already owns) plus `SceneNames` for the
+  always-present scene name constants. `ResolveCombatScene` is the pure/testable
+  fallback-resolution piece. Every scene remains independently openable (headless
+  regression tests that jump straight into a combat scene still work).
+- [x] **Headless verification**: `Phase3AValidation` (static checks: `ResolveCombatScene`
+  fallback/override logic, every `SceneNames` scene file exists on disk, Build
+  Settings registration incl. MainMenu at index 0) plus `Phase1WorkshopSmokeTest`
+  (Play-mode crash check on the rebuilt Workshop scene) all pass. A live *manual*
+  Menu → Workshop → Combat → (escape menu) → Workshop traversal was also exercised
+  while diagnosing the win/lose-condition bug below and confirmed working (the
+  `DontDestroyOnLoad`/`PlayerProgress` persistence was visible in the Hierarchy). A
+  fully scripted multi-scene Play-mode traversal (rather than manual click-through)
+  was not built — see `Phase3AValidation`'s own doc comment for why (Unity Editor
+  Play-mode sessions aren't reliably chainable across separate scene loads from a
+  single headless batch invocation) — this remains a gap if a stronger automated
+  guarantee is wanted later.
+- [x] **Bonus, found via live testing, not originally scoped**: fixed a real defeat-
+  condition bug (`CombatManager` required every `Team.Player` unit including the
+  unarmed scout escort to be destroyed, so losing the player-controlled drone while
+  the scout survived left the match stuck in `InProgress` forever) and added a
+  "Return to Workshop" button to the VICTORY/DEFEAT HUD banner plus an ESC-bound
+  pause/escape menu (Resume / Return to Workshop / Quit Game, via
+  `EscapeMenuController`) wired into every combat/Test Range scene through the shared
+  `Phase1CombatSceneBuilder.BuildHud` helper.
+
+**Exit criteria:** Starting from the Main Menu, a player can reach the Workshop, pick or
+change what they're testing against entirely from in-scene UI, go test it, and return to
+the Workshop — without ever needing an external menu, without any scene transition feeling
+like a discontinuity in the flow.
+
+---
+
+#### 3B — Visual Fidelity: Designs Look Like What They Are
+**Goal:** The single biggest gap right now is that the 3D model doesn't visibly react to
+the loadout. A design with 5 missiles on hardpoints must show 5; a design with 3 must show
+3; a camera-nosed variant must look different from a seeker-nosed one. This has to be true
+identically in the Workshop preview and in live combat (both go through
+`VehicleFactory`'s spawn pipeline, so this is one implementation, not two) — it's also the
+precondition for 3C, since a tech-tree trade-off (e.g. "diesel = heavier, longer range")
+isn't legible to the player if the model never changes to reflect it. Build the
+mesh-swapping keyed generically off the existing part enums/definitions (not hand-authored
+per today's specific part roster) so 3E's later top-tier content (hypersonic missiles,
+stealth CCA drones) plugs into the same system instead of requiring it to be reworked.
+
+- [x] **Hardpoint-count-driven missile visuals**: confirmed the pre-3B behavior actually
+  was "one placeholder capsule regardless of loadout, never attached to a drone at all" —
+  `VehicleFactory`/`DroneVisualBuilder` had no hardpoint-socket concept whatsoever.
+  `DroneVisualBuilder.Build{Multirotor,FixedWing}Visual` now return hardpoint socket
+  transforms sized to `DroneAirframeDefinition.hardpointCount`, and `VehicleFactory`'s new
+  shared `BuildVisualAndMountedMissiles` mounts one `MissileVisualBuilder`-built missile
+  per currently-loaded round (capped to hardpoint count). Went further than "show N at
+  spawn": a new `WeaponController.OnFired` event + `MountedMissileVisuals` component
+  removes one mounted visual per shot fired in real combat, so the rack visibly empties as
+  ammo depletes, not just at spawn time.
+- [x] **Sensor/seeker/camera nose swapping**: audit confirmed nose/seeker/sensor meshes
+  didn't exist at all pre-3B (missiles were one undifferentiated capsule; drones had no
+  nose concept whatsoever). New `MissileVisualBuilder` gives every one of the 9
+  `SeekerType` values its own nose treatment (radome cones for SARH/ARH, dark glassy domes
+  for Infrared/ImagingInfrared, a pale glass dome for Optical, an emissive red lens for
+  Laser, a blunt nose + trailing wire-spool for WireOrDatalinkGuided, a combined
+  radome+IR-window for MultiSpectral). `DroneVisualBuilder.BuildSensorPod` gives drones a
+  nose pod shaped by whichever of `SensorSuiteDefinition`'s radar/EO-IR/ESM ranges
+  dominates — an EO-IR-dominant suite (scout drones) gets an actual camera/gimbal-ball
+  look, directly landing the original "camera on the front rather than a sensor" ask.
+- [x] **Missile-on-missile visual composition**: external weapon bays
+  (`WeaponBayDefinition.isInternal == false`) show mounted missiles on hardpoints;
+  internal bays show nothing mounted at all (still tracked normally by `WeaponController`,
+  just not rendered) — implemented directly in `BuildVisualAndMountedMissiles`.
+- [x] **Fixed-wing/rotor silhouette differentiation**: audit confirmed wing type, hull
+  material, and rotor material/size were all pure stats with zero visual effect pre-3B
+  (only rotor *count* and the multirotor-vs-fixed-wing split changed anything). Now:
+  `LiftSurfaceType.DeltaWing`/`VariableSweepWing` get a real tapered/swept wing mesh (hand-
+  authored via new `PrimitiveMeshFactory.CreateTaperedWing`, since a cube fundamentally
+  can't represent a triangular planform — `FixedWing` keeps the original straight cube);
+  `RotorMaterial`/`RotorSize` change rotor blade scale and finish (Plastic/CarbonFiber/
+  Metal); hull material changes finish via a new `TeamColorUtility.ApplyTeamColor`
+  overload (metallic/smoothness/darkening per `HullMaterialType`) while preserving team-
+  hue recognition.
+- [x] **Real-time preview updates**: audit found there was no 3D preview in the Workshop
+  at all pre-3B — `RefreshDesignPreview` only ever built text `Label`s, never a model. Built
+  a real live 3D preview: a `WorkshopPreviewStage` (culled-by-layer preview camera +
+  RenderTexture, wired by `Phase1WorkshopSceneBuilder`) displayed in a new
+  `design-preview-viewport` `Image` element, rebuilt via `VehicleFactory.
+  BuildVisualOnlyDrone` (the same visual-build path combat uses, guaranteeing "identical
+  in Workshop and combat" structurally rather than by convention) on every
+  `RefreshDesignPreview` call. Goes beyond the checklist item: mouse-drag rotates the
+  model and scroll-wheel zooms (forwarded from the UI Toolkit `Image` element's pointer/
+  wheel events to `WorkshopPreviewStage`), with slow auto-rotation resuming a couple
+  seconds after a drag ends.
+- [x] **Headless verification**: `Phase3BValidation` — all 9 `SeekerType` values produce a
+  nose detail piece; hardpoint-mounted missile count matches `min(ammoCount,
+  hardpointCount)`; internal weapon bays show zero mounted visuals; all three
+  `LiftSurfaceType` wing variants build a `MainWing`; Titanium vs. RAM hull materials
+  produce distinct finish materials; a null/incomplete loadout builds an empty preview
+  without throwing. All checks pass, alongside a full re-run of every existing headless
+  regression (`Phase1BatchRunner`, both Phase 2E arenas, `CombatTestSceneBuilder`,
+  `Phase1WorkshopSmokeTest`, `Phase3AValidation`) with zero exceptions.
+
+**Exit criteria:** Given two designs that differ only in missile count, seeker type, or
+hull/rotor material, a player can tell them apart by looking at the model alone — in both
+the Workshop preview and a live combat spawn — without reading any stat panel. Met: verified
+both via `Phase3BValidation`'s headless assertions and by rebuilding every affected scene
+and running the full regression suite clean.
+
+**Follow-up pass (direct user feedback on the first cut):** the initial viewport/UI shipped
+with real problems the checklist above didn't catch since it only asserted structure, not
+actual layout/readability — fixed all of the following:
+- **Layout overflow bug**: `design-preview-content`'s ~11-line text stat dump had no fixed
+  height/scroll, so it silently overflowed past the panel boundary and visually overlapped
+  the "Test Against" scenario picker and deploy buttons below it. Replaced with a compact
+  `design-stat-card` (3-4 short lines) overlaid on the viewport instead of stacked below it.
+- **Viewport was tiny**: was a fixed 220px box sharing a narrow 380px-wide column with the
+  text dump. `#design-preview-panel` now `flex-grow: 1` (fills all remaining horizontal
+  space after the Tech Tree/part-picker columns) and the viewport itself `flex-grow: 1` with
+  a 420px floor — the dominant element on screen, not a small inset.
+- **Button-row pickers → dropdowns**: `BuildPartSlotRow` (a wrapped row of option buttons
+  per slot) replaced with `BuildPartSlotDropdown` (one `DropdownField` per slot) — didn't
+  scale well once slots had many unlocked options, per user feedback.
+- **Missile/Craft visual separation pulled forward from 3C**: added Craft/Missile mode tabs
+  (`SetDesignerMode`) to the part-picker column instead of one long stacked "Missile
+  Loadout" + "Drone Loadout" list — the live 3D preview still always shows the assembled
+  strike drone regardless of active tab, so editing a missile part under the Missile tab
+  visibly updates the mounted missiles on the same previewed craft.
+- **Hull material appeared to do nothing**: root cause was lighting, not logic — the
+  isolated preview stage had a single directional light and no skybox/reflection probe, so
+  PBR metallic/smoothness differences (which read mostly from reflected environment light)
+  were nearly invisible. Added a second fill light plus flat scene-wide ambient light
+  (`RenderSettings.ambientMode`/`ambientLight`) to `Phase1WorkshopSceneBuilder`'s preview
+  stage so the existing per-`HullMaterialType` finish differences actually show.
+- **Fixed-wing/flying-wing drones looked like "toy planes"**: `BuildFixedWingVisual` only
+  ever branched on `wingOrPropeller.liftSurfaceType`, never on
+  `DroneAirframeDefinition.airframeClass` — every one of FixedWing/FlyingWingStealth/
+  CcaScale got an identical fuselage-capsule + flat-slab-tailplane silhouette. Now each
+  class gets a real distinct body: `FlyingWingStealth` has no separate fuselage/tail at all
+  (the wing *is* the airframe); `CcaScale` gets a flat blended wing-body with no vertical
+  tail (X-47B-style tailless UCAV); `FixedWing` keeps a fuselage but thinner/longer with a
+  canted V-tail instead of a flat slab and longer/thinner wings (Predator/MALE-style,
+  rather than a toy biplane).
+
+Re-verified: `Phase3BValidation` (all checks still pass), plus the full regression suite
+(`Phase1BatchRunner`, `Phase1WorkshopSmokeTest`, both Phase 2E arenas,
+`CombatTestSceneBuilder`) with zero exceptions after this follow-up pass.
+
+**Second follow-up pass (more direct user feedback, plus a user-suggested feature):**
+- **Tech Tree didn't belong as a permanent column**: removed the always-visible
+  `tech-tree-panel` column entirely; the tech tree is now a third "Research" tab
+  sharing the same part-picker column/scroll as Craft and Missile
+  (`DesignerMode.Research`). A real dedicated tech-tree graph view is still 3C's job
+  (see 3C above) — this just gets it out of the designer's way for now, per feedback.
+- **"Everything is blue"**: root cause was `TeamColorUtility`'s hull-finish materials
+  multiplying each `HullMaterialType`'s finish by the *full* team color, so every
+  hull's base color was still team-hue-dominated regardless of material. Rewrote to
+  start from each material's own real-world base color (titanium/aluminum bare
+  metal, RAM/carbon fiber dark, composite plastic light putty-grey) and blend in only
+  a small team tint (`HullTeamTintWeight = 0.16`) for identification — plus a
+  similar (slightly stronger) fix for the neutral gunmetal base missiles and other
+  no-hull-material visuals use. Emissive glow strength reduced to match.
+- **Fixed-wing drones were "laughably tiny"**: `BuildFixedWingVisual`'s defaults were
+  tuned to a ~2m "aircraft" against real references like the MQ-1 Predator (~14.8m
+  span/~8.2m length) and X-47B (~18.9m span/~11.6m length). Bumped defaults to 6m
+  span / 4m fuselage length (scaled down from full military-UAV size to fit this
+  game's smaller drone universe, but unmistakably aircraft-scale) — combined with
+  each airframe class's own span/length multipliers, this yields ~6.6-7.8m span
+  aircraft. Missile length also bumped moderately (full length now ~1.5-2.6m vs. the
+  original ~1.1-2.0m) per the same "think about real dimensions" feedback, with an
+  explicitly documented open tension noted in `MissileVisualBuilder`'s doc comment:
+  the same missile size range is used for every carrier size (tiny quad up to full
+  fixed-wing UCAV), which isn't fully solved here. The Workshop preview camera's
+  default distance/zoom range and far clip plane were widened to match (was tuned
+  for the old ~2m scale).
+- **User-suggested feature, implemented**: while the Missile tab is active, the live
+  3D preview now swaps from the full strike drone to a close-up of just the missile
+  (auto-framed at a much closer default zoom, per `WorkshopPreviewStage`'s new
+  per-subject framing defaults) instead of a tiny missile mounted on a much bigger
+  aircraft. The existing auto-rotate-when-not-dragging behavior applies unchanged, so
+  the missile slowly rotates for detail inspection exactly as suggested. Switching
+  back to Craft/Research restores the full-drone view at its own default framing.
+  Manual zoom/rotation is only reset when the *subject* changes (drone <-> missile),
+  never on every keystroke while editing the same one.
+
+Re-verified again: `Phase3BValidation` all pass, plus the full regression suite
+(`Phase1BatchRunner`, `Phase1WorkshopSmokeTest`, both Phase 2E arenas,
+`CombatTestSceneBuilder`) with zero exceptions after this second follow-up pass.
+
+**Third follow-up pass**: the second pass's missile length increase (for realism)
+immediately collided with the multirotor case — a ~1.5-2.6m missile mounted on a
+~1.8m-diameter SmallQuad visually swallowed the entire drone (screenshot evidence:
+what should have been a quadcopter rendered as two giant rods with a barely-visible
+body between them). Fixed by making `DroneVisualBuilder.Build{Multirotor,FixedWing}Visual`
+each compute and return a `missileMountScale` derived from *that carrier's own*
+characteristic size (armLength*2 for multirotors, an equivalent nose-to-center proxy
+for fixed-wing bodies), targeting mounted missiles at ~45% of the carrier's own size
+rather than a flat 0.85 constant regardless of platform — a tiny quad now gets
+proportionally tiny mounted missiles, a large fixed-wing aircraft gets proportionally
+larger ones, matching how real aircraft ordnance always reads smaller than its
+carrier. Does not fully resolve the underlying size-class tension (a small quad's
+missile is still the same stats/model as a big aircraft's, just drawn smaller here) —
+that remains an explicitly open note in `MissileVisualBuilder`'s doc comment.
+Re-verified once more: `Phase3BValidation` all pass, full regression suite clean.
+
+**Fourth follow-up pass**: still "bonkers" per further screenshot evidence — two more
+real, distinct root causes found:
+1. **Hardpoints sat almost exactly at the wingtip** (0.48-0.58 × wingSpan), so mounted
+   missiles rendered as two detached-looking blobs way out past the aircraft's own
+   silhouette rather than pylons attached to its body — nothing like a real Predator/
+   Reaper's inboard-mounted Hellfires. Moved to 0.14-0.22 × wingSpan (well inboard,
+   close to the fuselage/wing root).
+2. **The wing/fuselage were too thin to read at the new larger scale**, especially
+   from the preview camera's original low, near-level angle — a flying-wing/blended-
+   wing-body silhouette with almost no vertical thickness viewed nearly edge-on just
+   disappears into a line. Thickened every wing/fuselage cross-section (`BuildWing`
+   gained a `thickness` parameter, previously hardcoded to 0.06 everywhere) and
+   raised the Workshop preview camera's default angle from a near-level 1.2m/10m
+   height/distance to a steeper 5m/12m, so the wing's top surface is actually visible
+   instead of viewed edge-on.
+
+Re-verified again: `Phase3BValidation` all pass, full regression suite
+(`Phase1BatchRunner`, `Phase1WorkshopSmokeTest`, both Phase 2E arenas,
+`CombatTestSceneBuilder`) clean.
+
+---
+
+#### 3C — Tech Tree: A Real Tree With Real Trade-offs
+**Goal:** Today's tech tree (per 2A/2B's `SeedTechTreeNodes` notes) is a flat/linear list
+gated by simple prerequisite chains, and the Workshop UI still shows it as a plain list
+(per the Full UI/UX pass item below). This sub-milestone makes it a genuine tree — visually
+branching, properly scaled — and audits every unlock so it delivers either a clear
+advantage or an explicit trade-off that's *directly reflected in the resulting vehicle*,
+not just a bigger number on a stat sheet.
+
+- [ ] **Tech tree graph UI**: replace the linear tech-tree list in the Workshop with an
+  actual branching node-graph view (per the Technology Stack section's original UI
+  Toolkit "Tech tree graph" intent) — nodes positioned by tier/category with visible
+  prerequisite edges, pan/zoom for scale as the tree grows across all of Phase 2's part
+  categories, locked/unlocked/affordable visual states per node.
+- [ ] **Trade-off audit pass** across every existing `TechNode`/part pairing — for each
+  unlock, confirm (and where missing, add) a real, opposed stat consequence rather than
+  a strict upgrade. Concrete examples already implied by existing data that should be
+  double-checked end-to-end (stat exists **and** is legible to the player in the
+  designer, not just present in `DesignStatsCalculator`'s internals):
+  - Diesel (`Fuel_Diesel_Basic`) vs. Petrol vs. Electric: longer range/endurance,
+    heavier and slower than battery-electric — confirm the resulting design's
+    estimated range/top-speed actually diverge, not just its fuel-type label.
+  - RCS-shaping / RAM hull (`Hull_RadarAbsorbentMaterial`): should measurably shrink
+    an enemy's detection *and* lock range against this design (via
+    `DetectableSignature`/`DetectionSensor`'s existing RCS-multiplier math per 2C) —
+    confirm this is visible somewhere in the designer as an estimate, not only
+    provable by reading source.
+  - Titanium hull (`Hull_TitaniumAlloy`): lighter-for-its-armor-rating and higher
+    `maxTemperatureCelsius` vs. cheaper/heavier alternatives — confirm the mass
+    delta actually changes estimated TWR/range in the stat card, not just an armor
+    number.
+  - Heavy/high-fuel-fill missiles vs. small airframes: a missile loadout at high
+    `fuelFillFraction` should be able to exceed a small drone's per-hardpoint mass
+    budget or the airframe's MTOW headroom — confirm MTOW validation (2A/2B) already
+    surfaces this as a real "too heavy for this airframe" block in the UI, not just a
+    theoretical possibility.
+  - Weather-driven choices: **scoped down to a single concrete instance** rather than
+    an open-ended goal, since nothing in the current data model ties weather to part
+    choice yet — pick one paired mechanic (e.g. IR/Imaging-IR seeker detection
+    probability penalized in a cloud/rain weather state, RAM's RCS-multiplier
+    advantage increasing further when enemy radar is already degraded by weather) and
+    wire that one instance end-to-end. Anything beyond that single instance is
+    explicitly deferred to 3E, not left as an open bullet here.
+- [ ] **Visual/designer separation for missile vs. drone/plane design**: the Workshop
+  currently shows a single scrolling panel with a "Missile Loadout" section and a
+  "Drone Loadout" section stacked together (per 2A/2B). Split these into distinct
+  designer views/tabs the player explicitly switches between (e.g. a mode toggle or
+  two tabs at the top of the Workshop), each with its own 3D preview instance — not one
+  shared preview trying to represent both an armed drone and its missile at once — so
+  switching modes is an obvious, visible context change per the reference. **Reuse 3A's
+  navigation/mode-switch primitive** for this rather than building a separate
+  ad hoc toggle mechanism.
+- [ ] **Immediate visual reflection tied to 3B**: since 3B already makes part swaps
+  visible on the model, confirm tech-tree unlocks that change a *currently equipped*
+  part's availability (e.g. unlocking a new engine tier) don't require leaving and
+  re-entering the designer to see the option — or the model to update once selected.
+- [ ] **Headless verification**: a validation script confirming the tech-tree graph
+  data (nodes/edges/prerequisites) resolves correctly at scale, and that the
+  trade-off audit's stat assertions above (e.g. RAM detection-range reduction,
+  titanium mass-vs-armor delta) hold via `DesignStatsCalculator`/`DetectionSensor`
+  checks — not just eyeballed once in the Editor.
+
+**Exit criteria:** The tech tree renders as a real branching graph, not a list; picking
+between two unlocked options for the same slot produces a genuinely different, player
+legible vehicle (visually and in its estimated stats) rather than a strict upgrade; missile
+and drone/plane design are two visually distinct designer contexts the player switches
+between explicitly.
+
+---
+
+#### 3D — Feel & Usability Pass
+**Goal:** Once 3A–3C exist, spend a dedicated pass actually playing the loop end-to-end to
+find flight feel, control, and UX gaps that are hard to see from data/headless validation
+alone (2B's own exit-criteria note already found real gaps — unconditional
+`isThrusting = false`, no aerodynamic lift model — only via live playtesting after headless
+checks passed clean). Treat this as an explicit checklist-building pass, not a fixed list
+written ahead of time:
+- [ ] Playtest fixed-wing/jet vs. multirotor control schemes across the full propulsion
+  spectrum now that 3B's visuals and 3C's trade-offs make each design meaningfully
+  different to fly, not just to look at. **Superseded for the flight-model half of this
+  ask** — direct user feedback mid-3D was that fixed-wing/jet flight was simply broken
+  (no real reason to stall, banking didn't correctly redirect lift, throttle was an
+  ad-hoc bolt-on), not just "needs a feel pass." That's now its own sub-milestone, 3G
+  below, which rebuilds the flight model itself before this item's original "playtest
+  and log feel issues" scope applies to it.
+  - [ ] Log every "feels off" / "hard to use" / "something's missing" observation as its
+  own tracked item as it comes up, rather than guessing them in advance.
+- [ ] Triage the resulting list into: fix now (3D), defer to 3E/3F (balance/content), or
+  defer to Post-1.0.
+
+**Exit criteria:** A punch-list of concrete flight-feel/UX issues exists, has been triaged,
+and the "fix now" subset is closed out.
+
+---
+
+#### 3G — Fixed-Wing Flight Model Rework
+**Goal:** Fixed-wing/jet drones fly correctly (thrust, lift, and maneuvering behave like a
+real aircraft, including a genuine stall and coordinated banked turns) instead of the thin,
+physically-incorrect model 2B originally shipped, and the Workshop lets a player pick
+"Multirotor" vs. "Fixed-Wing" as a real filter on which parts they're offered — without
+touching the tech tree topology or introducing a second, parallel physics/part pipeline.
+
+**Context — why this needed a rework, not a tuning pass:** the original fixed-wing model
+(`FlightBody.useAerodynamicLift`, added in 2B) computed lift as a flat
+`liftCoefficient * speed^2` along `transform.up`, with no angle-of-attack term at all. That
+meant: (1) no real stall — a design was airborne at a given speed regardless of how it was
+pointed, since attitude never entered the lift calculation; (2) banking didn't correctly
+redirect lift relative to the actual direction of travel (it used the raw local `up` axis,
+not `up` projected against the real relative airflow), which mostly happened to work by
+coincidence at small angles but wasn't the real relationship; (3) the player's Space/Shift
+throttle was an ad-hoc *extra* force stacked on top of a constant baseline thrust, not a
+real throttle lever — idling back never actually reduced thrust to near-zero. None of this
+was a balance/tuning problem; the underlying force model was wrong, which is exactly why
+this is a rework, not a 3D-style feel pass.
+
+- [x] **Angle-of-attack-driven lift + stall model**: `FlightBody.ComputeAngleOfAttackDegrees`
+  (pure function: signed angle between the nose and the actual velocity vector, in the
+  pitch plane, sideslip excluded) and `FlightBody.ComputeLiftFactor` (a lift-curve lookup —
+  1.0 at the wing's tuned `referenceAoADegrees`, rising toward `criticalAoADegrees`, then
+  collapsing to a ~35% post-stall plateau over the next 10 degrees, mirrored onto the
+  negative side around `zeroLiftAoADegrees`) replace the flat `speed^2` formula. Lift now
+  acts along `transform.up` projected perpendicular to the actual velocity vector (not the
+  raw local axis), so banking genuinely redirects lift — the real mechanism behind
+  "turn by banking, not by yawing." `WingOrPropellerDefinition` gained
+  `zeroLiftAoADegrees`/`referenceAoADegrees`/`criticalAoADegrees`/`inducedDragFactor` (new
+  fields, additive — existing Propeller-type rotor assets are unaffected since
+  `useAerodynamicLift` is never true for multirotors); the three existing fixed-wing wing
+  assets (`Wing_FixedWing`/`Wing_DeltaWing`/`Wing_VariableSweepWing`) were re-tuned rather
+  than replaced, keeping their stable ids/tech-tree wiring — Delta Wing's much higher
+  `criticalAoADegrees` (28 vs. FixedWing's 15) is what "far more maneuverable" now
+  concretely means under a real AoA model, not just a `turnRateDegreesPerSecond` number.
+  Verified headlessly via `Phase3GFixedWingValidation` (lift-curve shape, AoA sign
+  convention against a known pitched attitude, trim-level-flight equality, insufficient
+  lift at half cruise speed even at max AoA, and a banked-lift force-vector decomposition
+  — all PASS).
+- [x] **Real throttle lever**: `FlightBody.throttleFraction` (0-1, defaults to 1 so
+  AI/missile-style bodies that never touch it are unaffected) scales `thrustNewtons`
+  directly; `PlayerDroneController`'s Space/Shift now ramp this lever up/down over time
+  (`throttleChangeRatePerSecond`) instead of adding an ad-hoc extra force on top of a
+  constant baseline thrust.
+- [x] **Control authority scales with airspeed**: `PlayerDroneController.
+  ComputeControlAuthority` (pure function, speed^2/referenceSpeed^2, clamped 0-1) scales
+  roll/pitch rate — a slow or near-stalled fixed-wing design is now genuinely sluggish to
+  steer, not just slow to look at, matching real control-surface effectiveness depending on
+  airflow. Verified headlessly (0 at zero speed, 1 at/above the reference speed, correctly
+  between the two at half-reference).
+- [x] **"Little flying rectangle" prototype rig**: `Phase3GFixedWingPrototypeSceneBuilder`
+  (`Vanquish/Phase 3G/Build Fixed-Wing Prototype Scene`) builds a standalone
+  `FixedWingPrototype.unity` — a single stretched, brightly-colored cube with `FlightBody`
+  configured directly in aerodynamic-lift mode (hand-tuned numbers derived from "cruise at
+  25 m/s at the wing's referenceAoA," not from any seeded part asset) and a live
+  `PlayerDroneController`, plus `FixedWingPrototypeTelemetry` (an OnGUI airspeed/altitude/
+  AoA/throttle overlay, same "ugly art is fine, log the numbers" precedent as
+  `Phase0TestHarness`/`TestRangeTelemetry`) — deliberately bypassing
+  `DroneLoadout`/`DesignStatsCalculator`/`VehicleFactory` entirely, so thrust/lift/
+  maneuvering could be validated and felt in isolation before any real fixed-wing craft
+  content depended on the model being right, per the plan's own request. Disposable/
+  unwired into the Workshop-Combat flow by design — open the scene and press Play.
+- [x] **Headless kinematic validation of the whole model**: `Phase3GFixedWingValidation`
+  (`Vanquish/Phase 3G/Validate Fixed-Wing Flight Model (Headless)`) mirrors
+  `Phase2CValidation`'s guidance-law kinematic-simulator pattern — a plain C# loop calling
+  `FlightBody`'s and `PlayerDroneController`'s actual production static functions (not a
+  parallel reimplementation) at 50Hz for a simulated banked-turn-with-back-pressure
+  maneuver. Confirmed: heading yaw changes by >20° purely as an emergent result of banking
+  (there is still no direct yaw control anywhere in this flight model — matches the
+  existing "turn by banking" design decision from 2B's own exit-criteria writeup), the
+  velocity vector tracks the nose to within ~1.5° (a coordinated turn, not a skid, thanks
+  to `alignVelocityToForward`), and altitude holds within ~3m of the start over the
+  5-second maneuver. All 8 sub-checks (lift curve shape, AoA sign, trim flight, low-speed
+  stall, banked-lift decomposition, control authority scaling, the coordinated-turn
+  simulation, and `DroneCompatibility` mismatch detection below) PASS.
+- [x] **Part-compatibility validation** (a real gap found while scoping this rework —
+  nothing previously stopped equipping a jet engine on a quadcopter airframe):
+  `DroneCompatibility` (`Vanquish/Data/Drones/`) maps each of Airframe/WingOrPropeller/
+  Propulsion/Engine to a `FlightConfiguration` (`Multirotor`/`FixedWing`) from the field
+  that already drives simulation behavior (`rotorCount`, `liftSurfaceType`,
+  `requiresForwardFlight`) — deliberately not a duplicated field on every part, to avoid a
+  second source of truth. `DroneEngineDefinition` gained its own
+  `requiresForwardFlight` bool (the one part type that previously had no field implying a
+  flight model at all) mirroring `PropulsionDefinition`'s own flag; set `true` on
+  `Engine_Jet_Subsonic`/`Engine_Jet_Supersonic`. `DesignStatsCalculator` now computes
+  `isFlightConfigurationCompatible`/`flightConfigurationMismatchReason` on
+  `DroneRuntimeStats`, and `WorkshopController` gates Enter Combat readiness on it exactly
+  like the existing MTOW check, surfacing the specific mismatched slot if one exists.
+- [x] **Workshop "Airframe Type" toggle** (the actual "toggleable option in the workshop to
+  choose parts" ask — tech tree and physics pipeline unchanged, confirmed with the user
+  before implementing): a two-way Multirotor/Fixed-Wing segmented toggle
+  (`WorkshopController.BuildAirframeTypeToggleRow`, reusing the existing
+  `designer-mode-tabs` USS classes rather than new UI) sits above the Craft tab's part
+  list and filters the Propulsion/Airframe/Wing-or-Rotor/Engine dropdowns to
+  `DroneCompatibility`-compatible options for the selected side via
+  `WorkshopController.FilterByFlightConfig`; Hull Material/Fuel/Weapon Bay/Countermeasure
+  stay unfiltered since they're flight-model-agnostic. `ResolveSelection` now also checks
+  array membership (not just still-unlocked) so flipping the toggle away from a
+  currently-selected part correctly falls back to the first compatible unlocked option
+  instead of keeping an now-hidden-but-still-unlocked selection. This is purely a Workshop
+  UI filter — no new `DroneLoadout` field, no new TechNode, no parallel part/workshop
+  system, exactly as scoped.
+- [x] **Regression-checked against the rest of the pipeline**: re-ran
+  `Phase2BValidation.ValidateDroneBreadthAssets`/`ValidateDroneBreadthTechWiring`/
+  `ValidateTier0DroneMtow` (all PASS — the electric-quadcopter Tier-0 loop is byte-for-byte
+  unaffected) and `Phase3BValidation.ValidateVisualFidelity` (all PASS — `DroneVisualBuilder`
+  still builds correct fixed-wing silhouettes/wing planforms against the re-tuned wing
+  assets), rebuilt `Workshop.unity` with no missing-asset errors, and ran a full 60-second
+  `Phase1BatchRunner` headless Play-mode combat regression against `Combat_Arena01` with
+  zero exceptions/`NullReferenceException`/`MissingReferenceException` — confirming this
+  rework didn't regress the already-working electric-quadcopter MVP loop.
+
+**Technical notes:** Deliberately did NOT introduce a separate `FixedWingFlightBody`
+class/component or a formalized `IAerodynamicBody` interface (both considered while scoping
+this work) — `FlightBody` is `[RequireComponent]`-depended-on by `DroneCombatAI`,
+`AltitudeController`, `GuidanceController`, `ScoutPatrol`, and `PlayerDroneController`, all
+via the concrete type; splitting it into two classes would have meant either duplicating
+that dependency surface or a much larger interface-extraction refactor across all five,
+which is a bigger and different piece of work than "make the existing fixed-wing branch
+physically correct." One shared `FlightBody` with a real aerodynamic mode for fixed-wing
+(vs. the missile/multirotor mode) matches how the class already worked and keeps every
+existing AI/guidance dependency unchanged. No atmospheric/altitude-density model was added
+(air density is the constant sea-level value throughout, same simplification the rest of
+the codebase already carries per PLAN.md's own Atmospheric Model aspiration, still
+unimplemented) — noted as a still-open future-phase item, not something this rework
+silently regressed.
+
+**Exit criteria:** A player can fly a fixed-wing design that genuinely stalls at low
+speed/high AoA, turns via banking rather than skidding, and responds to a real throttle
+lever (✅ — validated both by the standalone prototype rig, playable directly, and by the
+headless kinematic simulation above); the Workshop lets a player filter parts by airframe
+type without any change to the tech tree or the underlying simulation pipeline (✅); a
+design combining incompatible flight-model parts is flagged rather than silently accepted
+(✅ — `DroneCompatibility`, verified headlessly against a real seeded-asset mismatch case).
+
+---
+
+#### 3H — Planform Presets
+**Goal:** Merge the separate Airframe and Wing slots into curated, real-world-referenced
+"Planform" presets — one per reference silhouette supplied by the user (Northrop Grumman
+X-47B, Anduril YFQ-44A Fury, General Atomics Gambit, plus a "Brontanax" fan-art cutaway
+used for internal-layout/tail-control-surface reference) — with believable real-world
+scale, correctly-proportioned mounted munitions, and a neutral military color scheme
+instead of the previous saturated team-color tint.
+
+- [x] **Merged Airframe+Wing "Planform" picker**: new `DronePlanformDefinition` (a plain
+  ScriptableObject, not a `PartDefinition` — see its own doc comment for why: a preset has
+  no independent cost/tier, it's a named pointer at an already-tech-gated airframe+wing
+  pair) pairs one `DroneAirframeDefinition` with one `WingOrPropellerDefinition`.
+  `WorkshopController`'s Fixed-Wing toggle branch now shows one "Planform" dropdown
+  (`BuildPlanformSlotDropdown`) instead of separate Airframe/Wing-or-Rotor dropdowns;
+  selecting a planform sets both `_selectedDroneAirframe`/`_selectedDroneWing` internally,
+  so `TryBuildDroneLoadout`/`DesignStatsCalculator`/`VehicleFactory` need zero changes —
+  none of them are aware a merged picker exists. Multirotor mode is unaffected (still two
+  independent Airframe/Wing-or-Rotor dropdowns), since a rotor is a genuinely separable
+  accessory the way a wing planform isn't.
+- [x] **Three curated planforms, one per reference silhouette**, tied into the tech tree
+  as a single merged purchase each (unlocking both the airframe and wing together, not
+  two separate purchases):
+  - **Twin-Tail Fighter Planform** (Fury/YFQ-44A/"Brontanax"-class): `Airframe_FixedWing`
+    (reused, retuned) + `Wing_DeltaWing` (reused, retuned in the fixed-wing flight-model
+    rework). `DroneVisualBuilder.BuildConventionalFuselageAndWing` rebuilt: a flattened,
+    chined-look fuselage (a stretched cube, not the previous round capsule — a capsule
+    can't read as "chined"), a pointed nose cone (`PrimitiveMeshFactory.CreateCone`,
+    previously only used for missile noses), wings repositioned closer to mid-fuselage,
+    and a canted twin tail (generalized from the old single-purpose `BuildVTail` into
+    `BuildTwinCantedTails`, shared with the recon planform below at different
+    proportions).
+  - **Cranked-Kite Recon Planform** (Gambit-class): `Airframe_CcaScale` (reused, retuned) +
+    `Wing_VariableSweepWing` (reused). `BuildBlendedWingBody` gained a pair of small
+    outward-canted tails (`BuildTwinCantedTails`) — the reference Gambit variants clearly
+    have twin tails, unlike the fully tailless treatment this body style got in the
+    original fixed-wing visual pass, which conflated every tailless-*looking* UCAV into
+    one silhouette.
+  - **Flying-Wing Stealth Planform** (X-47B-class): `Airframe_FlyingWingStealth` (reused,
+    retuned) + new `Wing_FlyingWingKite`. New `LiftSurfaceType.FlyingWing` enum value
+    (appended) and new `PrimitiveMeshFactory.CreateKiteWing` — a hexagonal
+    cranked/double-delta planform mesh (leading edge sweeps at one angle root-to-crank,
+    a different steeper angle crank-to-tip) instead of the plain single-sweep triangle
+    `CreateTaperedWing` already covered, matching the X-47B's distinctive
+    "broad-shouldered" kite silhouette. `AddWingHalf`'s fan-triangulation was generalized
+    from a hardcoded quad to an arbitrary convex N-gon (verified equivalent for the
+    quad case first) so one function serves both the delta/swept quad and the new
+    hexagonal kite. `BuildFlyingWingBody` also gained a low, broad dorsal hump standing
+    in for the real X-47B's distinctive top-mounted engine air intake — the single most
+    recognisable non-wing detail on the real aircraft. Remains fully tailless, unlike the
+    other two.
+  Retired the six individual per-airframe/per-wing TechNodes the fixed-wing-flight-model
+  rework (3G) had created (`TN_2B_drone_airframe_fixedwing/flyingwingstealth/ccascale`,
+  `TN_2B_drone_wing_fixedwing/deltawing/variablesweepwing`) in favor of three merged
+  `TN_3H_planform_*` nodes, and deleted the now-fully-unused `Wing_FixedWing.asset` (the
+  plain straight wing wasn't chosen for any of the three curated planforms) rather than
+  leaving it as orphaned, unreachable content. `Phase2BDroneBreadthSeeder` was updated to
+  stop re-creating any of the retired content if re-run.
+- [x] **Believable, real-world-referenced scale**: `DroneAirframeDefinition` gained
+  `wingSpanMeters`/`fuselageLengthMeters` (visual-only — does not touch mass/drag/MTOW,
+  which stay within this game's existing Tier balance envelope). Fury's dimensions are
+  the real disclosed figures (17ft/20ft → 5.2m/6.1m); X-47B's are the real dimensions
+  scaled by ~0.74x (18.92m/11.63m → 14m/9m — still unmistakably the largest of the three,
+  matching reality, without making the in-game aircraft absurdly large relative to
+  existing ~600-1200m arenas); Gambit's are an estimate between the other two (General
+  Atomics hasn't published exact figures). `DroneVisualBuilder.BuildFixedWingVisual` now
+  reads these from the design's own airframe instead of one flat 6m/4m constant every
+  fixed-wing design previously shared. Verified headlessly (`Phase3HValidation.
+  ValidateSizeOrdering`): Fighter (5.2m) < Recon (9.5m) < Stealth (14m), matching the
+  real Fury < Gambit-estimate < X-47B ordering.
+- [x] **Correctly-scaled mounted munitions**: `DroneVisualBuilder.ComputeMissileMountScale`'s
+  upper clamp was 1x a nominal ~2m missile length — fine for the old ~6-8m fixed-wing
+  bodies, but a real Fury-class fighter (~6.1m) carries AIM-120s (~3.7m) at roughly 60% of
+  its own body length, which the old clamp couldn't reach. Raised to 2.2x (low-end 0.15x
+  clamp protecting tiny multirotors unchanged). Verified headlessly
+  (`Phase3HValidation.ValidateMissileMountScaleIsBelievable`): the Twin-Tail Fighter
+  planform mounts a ~2.7m missile against its 6.1m fuselage (44% ratio) — comfortably in
+  the believable 25%-100% AIM-120-vs-Fury-like range, not clamped to a comparatively tiny
+  fixed length regardless of carrier size.
+- [x] **Neutral military color scheme, not a "blue rinse"**: direct user feedback that
+  real reference aircraft (X-47B, Fury, Gambit) are neutral greys with only small
+  national-insignia-sized color accents, not a fully tinted airframe. `TeamColorUtility.
+  PlayerColor`/`EnemyColor` desaturated from a saturated cyan-blue/pure-red toward muted
+  low-visibility roundel tones; `HullTeamTintWeight` cut further (0.16 → 0.08); the hull
+  finish's emissive glow contribution was removed entirely (a matte military airframe
+  doesn't glow — the small emissive tint was part of what read as an overall blue rinse
+  across the whole hull). Missiles (which have no hull material, and genuinely benefit
+  from being spottable at range) keep a modest emissive tint, just reduced.
+
+**Technical notes:** Deliberately did not introduce a fourth, generic "mix your own"
+fixed-wing path alongside the three curated planforms — every asset (`Wing_DeltaWing`,
+`Wing_VariableSweepWing`, the retuned airframes) still exists as real, independently
+inspectable data, so a future planform can still reuse them in a new pairing, but the
+Workshop only ever *offers* the three deliberately-designed combinations. The user's own
+"we will probably add more later" is exactly why `DronePlanformDefinition` was kept as a
+thin preset pointer rather than folding the wing's stats directly onto
+`DroneAirframeDefinition` — adding a fourth planform is one new preset asset plus one
+TechNode, not a data-model change. `PrimitiveMeshFactory.CreateKiteWing`'s crank point,
+sweep angles, and chord ratios were hand-tuned by eye against the reference images rather
+than measured from real X-47B CAD data (no such data is publicly available in a form this
+project could consume) — "as close as possible" within the constraints of a
+procedural-primitives-only art pipeline, not a scanned/traced reproduction.
+
+**Visual-polish follow-up (direct user feedback with screenshots: "they all look super
+janky"):** built `Phase3HScreenshotTool` (`Vanquish/Phase 3H/Render Planform Screenshots
+(Debug)` and `.../Dump Planform Part Transforms (Debug)`) to actually render each
+planform headlessly to a PNG and dump every part's world-space transform/bounds, rather
+than reasoning about the mesh math blind — this caught three real bugs the Workshop
+screenshots alone didn't make obvious the cause of:
+1. `BuildTwinCantedTails`'s two fins shared the exact same position (only their
+   *rotation* differed) — a real single-root V-tail configuration, but oversized
+   (up to 18% of fuselage length) it read as a giant X slapped across the fuselage, and
+   none of the three reference aircraft actually use a single-root V-tail anyway (Fury/
+   Gambit/"Brontanax" all show two separately-rooted fins). Fixed: fins now get a real
+   lateral offset before being canted, and are roughly half the previous size.
+2. `VariableSweepWing`'s and the new `FlyingWing` kite's sweep-back distances were
+   computed as multiples of root chord — dimensionally the wrong basis (sweep is a
+   function of how far you travel *spanwise*, not chord depth) — which blew the
+   Cranked-Kite Recon wing out to ~9.6m of depth against an intended ~8m fuselage, and
+   the Flying-Wing Stealth kite out to ~16m against an intended ~9m. Retuned both to
+   scale sweep off actual span-segment distance instead; measured full-model bounds
+   after the fix landed within ~10% of each airframe's own fuselageLength.
+3. `WorkshopPreviewStage`'s fixed 12m/24m framing distance/max-zoom (tuned for the
+   pre-planform-preset ~6-8m aircraft) put the camera uncomfortably close to/inside the
+   new largest planform (~14m span) — raised to 20m/40m (`Phase1WorkshopSceneBuilder`'s
+   matching `PreviewCamera` rig updated to stay in sync).
+Also nudged the sensor pod off the conventional-fuselage nose cone's exact apex (was
+z-fighting/overlapping it) and scaled the missile hardpoint's vertical/longitudinal
+offset with fuselageLength instead of a flat constant (mounted missiles were clipping
+into the now-much-larger fuselage bodies). Re-verified via
+`Phase3HScreenshotTool.RenderAll` (visually inspected) and the full
+`Phase3HValidation`/`Phase3BValidation`/60-second combat regression suite (all still
+PASS) after every change.
+
+**Second visual-polish round (direct user feedback with fresh Workshop screenshots after
+the first round: "still not ideal" — cranked-kite mounted two missiles on the same side,
+flying-wing showed "a mysterious flying secondary structure underneath," twin-tail's body
+looked like "a cereal box with wings"):**
+- **Same-side missiles**: `CreateHardpointSockets` laid hardpoints out strictly
+  left-to-right, and `VehicleFactory` always mounts `hardpoints[0..ammoCount)` when a
+  design carries fewer missiles than it has hardpoint sockets — so a 6-hardpoint CCA-scale
+  airframe carrying 2 missiles mounted both of them on hardpoints 0 and 1, the two
+  *leftmost* sockets. Reordered the hardpoint array center-out, alternating sides
+  (innermost pair first), so any prefix of the array is bilaterally symmetric regardless
+  of how many hardpoints are actually filled. Verified via `Phase3HScreenshotTool`'s
+  transform dump: the Cranked-Kite Recon's two mounted missiles now sit at x=-0.30 and
+  x=+0.30 (were both around x=-1.5/-0.9, same side).
+- **"Mysterious floating structure"**: hardpoint sockets were bare empty transforms with
+  no pylon/rack geometry connecting a mounted missile to the airframe at all — barely
+  noticeable on the fighter (which has a fuselage/wing nearby to visually anchor it) but
+  glaring on the flying wing, where a ~4m missile hung in open space below a thin wing
+  with nothing visibly attaching it. New `DroneVisualBuilder.BuildPylon` adds a small
+  vertical strut bridging the body surface (local Y=0) down to each mounted missile,
+  built by `VehicleFactory` alongside each missile visual (both multirotor and fixed-wing
+  hardpoints benefit, not just the three planforms).
+- **"Cereal box" fuselage**: `BuildConventionalFuselageAndWing`'s body was a single
+  uniform-cross-section stretched cube. Split into two segments — a wider forward
+  body and a narrower aft boom — so the silhouette actually necks down toward the tail
+  like a real fighter fuselage, instead of reading as one flat-sided brick with a nose
+  cone glued to the front. (Deliberately still two boxes, not a fully lofted mesh — see
+  this sub-phase's earlier "as close as possible within a procedural-primitives-only
+  pipeline" framing.)
+Re-verified via `Phase3HScreenshotTool.RenderAll` (re-rendered and visually inspected all
+three planforms) and the full `Phase3HValidation`/`Phase3BValidation`/60-second combat
+regression suite (all still PASS) after every change.
+
+---
+
+#### 3J — Part Depth Pass (missiles, propulsion, weapon bays, sensors)
+**Goal:** A long list of direct user feedback that changing parts "doesn't make much
+difference" — missile fuel not affecting range, a missile that always hits, "too heavy to
+ever be on a missile", engine type not affecting maneuverability, Propulsion/Engine being
+functionally the same slot, RCS not shown, tiny masses, planform not affecting flight, no
+radar sensor option, fuel type only affecting mass, no throttle readout, a tiny sandbox
+terrain, a weapon bay that barely does anything, no scaling of ammo capacity to craft size,
+no internal-bay-first-then-pylon-overflow, no multi-missile-in-flight, and no visible
+countermeasure effect. Addressed each with a real, load-bearing mechanic rather than a
+cosmetic tweak, verified via `Phase3IValidation`/re-run `Phase2A`/`Phase2B`/`Phase3H`/
+`Phase3G` validation suites (all PASS) plus a 60-second headless Play-mode regression that
+happened to exercise both `Combat_Arena01` and a live `Workshop` scene transition (zero
+exceptions).
+
+- [x] **Missile fuel now genuinely limits range**: new `MissileBurnController` cuts thrust
+  once `MissileEngineDefinition.burnTimeSeconds * fuelFillFraction` elapses — before this,
+  `VehicleFactory` set `isThrusting = true` once at spawn and nothing ever turned it back
+  off, so fuel fill only ever changed mass. A half-full tank now genuinely reaches less far.
+- [x] **The "basic missile always hits" is fixed**: `GuidanceController` now gates
+  correction on the seeker's own `detectionRangeMeters`/`fieldOfViewDegrees` (previously
+  computed but never actually consulted — the terminal guidance law ran unconditionally
+  regardless of range). A target that maneuvers outside the seeker's cone, especially near
+  max range, now genuinely breaks the shot.
+- [x] **Engine type affects maneuverability**: new `MissileEngineDefinition.
+  maneuverabilityMultiplier` scales the airframe's `maxGForce` — a Solid Rocket's short
+  violent boost (1.15x) now out-turns a Scramjet's sustained-cruise airframe (0.65x) on the
+  same airframe, not just flies faster/further.
+- [x] **Missile airframes**: was a single `Airframe_Basic` (40kg MTOW) for every tier —
+  new Interceptor/Heavy Strike/Hypersonic tiers (55/78/95kg MTOW) so heavier Tier2-4 combos
+  (e.g. Scramjet + Cluster + Multi-Spectral, ~46kg with zero optional modules) are actually
+  buildable. Also promoted from a hardcoded single field to a real Workshop dropdown — it
+  was never player-selectable before this pass at all.
+- [x] **Countermeasures are now visible and seeker-quality-dependent**: a successful decoy
+  now spawns a visible flare burst (`CountermeasureVisualEffect`) instead of only a log
+  line, and the decoy's success roll is weighted by the inbound missile's own
+  `SeekerDefinition.countermeasureSusceptibility` (previously seeded but never read) — a
+  Multi-Spectral seeker (0.1) now genuinely resists the same flare a basic IR seeker (0.7)
+  falls for.
+- [x] **Propulsion+Engine merged**: new `DronePropulsionPackageDefinition` (same preset
+  pattern as the Planform merge) pairs one Propulsion with one Engine as a single
+  "Propulsion" dropdown — research confirmed the two slots substantially duplicated each
+  other (mass and IR signature both double-counted, thrust from the engine alone,
+  `requiresForwardFlight` only load-bearing from the propulsion side). Retired the 3 pairs
+  of individually-unlockable ICE/Jet-Subsonic/Jet-Supersonic TechNodes in favor of 3 merged
+  package nodes; Electric's Tier-0 unlock path (bundled with other starter parts) is
+  unchanged.
+- [x] **RCS is now shown**: `radarCrossSection` was computed but never surfaced in the
+  Workshop — now on the Missile/Strike Drone/Scout Drone stat lines.
+- [x] **Fuel/propulsion compatibility enforced**: `DroneCompatibility.IsFuelCompatible`
+  checks the fuel part's `FuelType` against what the propulsion actually needs (Electric
+  needs Battery, ICE needs Petrol/Diesel, any Jet needs Jet Fuel) — a battery-powered
+  supersonic jet is now flagged the same way a flight-configuration mismatch already was,
+  gating "Enter Combat" the same way.
+- [x] **Real radar sensor options**: only `Sensor_Basic` (1500m) and `Sensor_Scout` (4000m)
+  ever existed, and the strike drone's own sensor was hardcoded to `Sensor_Basic`
+  regardless of what was unlocked (no Sensor dropdown existed in the Workshop at all).
+  Added `Sensor_Radar_Advanced` (6000m) and `Sensor_Radar_LongRange` (10000m — beyond even
+  the longest seeded seeker, 9000m) plus a real Sensor dropdown, so a drone's own detection
+  isn't always the bottleneck against a well-equipped inbound missile.
+- [x] **Throttle indicator**: `HUDController`'s flight panel now shows throttle % (reads
+  `FlightBody.throttleFraction`) for fixed-wing designs — there was no power-setting
+  readout anywhere before this.
+- [x] **Much bigger sandbox terrain**: the ground plane (`Phase1CombatSceneBuilder.
+  BuildGround`, shared by the Test Range and every combat scene) was a fixed 600x600m
+  Plane — seeded sensor/seeker ranges already reach up to 10000m and the camera's far clip
+  is 12000m. Scaled to ~20000x20000m — bigger than the far clip in every direction, so the
+  edge is never visible regardless of engagement range, reading as effectively infinite
+  without a real streaming/tiled terrain system.
+- [x] **Weapon bay capacity is real, and smaller craft carry fewer missiles**:
+  `WeaponBayDefinition.maxMunitionCount`/`payloadCapacityKg` were seeded but never read —
+  `DroneRuntimeStats.effectiveAmmoCount` now clamps `DroneLoadout.ammoCount` to the bay's
+  real capacity (used for actual `WeaponController.ammoRemaining`, not just a visual
+  hardpoint cap). `WeaponBay_Small`'s capacity was cut from 4 to 2 (a Tier-0 starter bay
+  shouldn't match its own Tier-1 upgrade). Ammo count is also now a real Workshop slider
+  instead of a hardcoded 4.
+- [x] **Internal bay used first, then pylon overflow (affecting RCS)**: new
+  `WeaponBayDefinition.internalCapacity` splits a bay's `maxMunitionCount` into a hidden
+  internal portion (zero RCS contribution, no visible mesh) and an external overflow
+  portion (visible, adds RCS) — `WeaponBay_InternalMedium` is now a genuine mixed bay (4
+  internal + 2 external) rather than the old all-or-nothing `isInternal` flag. Each
+  externally-mounted missile now adds a fraction of its own RCS to the carrier's exposed
+  signature (`DesignStatsCalculator`), computed and rendered by `VehicleFactory`/
+  `DroneVisualBuilder` identically between the Workshop preview and live combat.
+- [x] **Multiple missiles in flight, gated by seeker tech**: `WeaponController.
+  maxConcurrentInFlight` (derived from the missile's seeker type — fire-and-forget
+  seekers like Active Radar/Imaging IR/Multi-Spectral allow up to 4 concurrent; wire/SARH/
+  laser, which need the launcher's continuous guidance/illumination, allow only 1) now
+  actually caps concurrent missiles — before this, nothing capped it at all beyond
+  ammo/cooldown. New `MissileLifecycleNotifier` frees a slot when a missile is destroyed.
+
+**Deliberately deferred, not attempted this pass:** a full real-world mass rebalance
+("masses are extremely small") and "planform doesn't affect how the aircraft flies" beyond
+what 3H/3G already wired (liftCoefficient/dragCoefficient/turnRate already flow from the
+wing into flight stats — a deeper pass tying wing *shape* more distinctly into handling
+would mean re-deriving the validated stall/lift-curve tuning from 3G, which carries real
+regression risk against that already-hard-won, headlessly-verified flight model for a
+payoff that's mostly about degree, not kind). Flagged as a follow-up rather than risked in
+the same pass as everything above.
+
+**Exit criteria:** Three visually distinct, real-world-scale fixed-wing planforms exist,
+each tied into the tech tree as a single purchase (✅ — verified headlessly via
+`Phase3HValidation`: presets load with the expected airframe/wing pairing, TechNodes
+unlock both parts together with a sane prerequisite chain, and `VehicleFactory`/
+`DroneVisualBuilder` build a working visual for each without throwing); mounted munitions
+read as a believable fraction of the carrier's own body length instead of a fixed size
+regardless of aircraft scale (✅); the airframe's color scheme reads as neutral military
+grey with team color as a small accent, not a dominant tint (✅ — `TeamColorUtility`
+retuned; no automated visual-color assertion beyond the emissive-material check
+`Phase3BValidation` already had, since actual on-screen color perception isn't something
+a headless test can meaningfully assert beyond "the material values changed as intended").
+
+---
+
+#### 3E — Content, Balance & Campaign Completion
+*(Carried over from the original Phase 3 scope — sequenced after 3A–3D since content/balance
+work is far cheaper to do once the designer, tech tree, and flow it's built against have
+stopped changing shape.)*
 - [ ] Top-tier content: stealth CCA-style drones, hypersonic air-to-air missiles
 - [ ] AI scaling — CPU tech/behavior escalates alongside player progression
-- [ ] Full UI/UX pass: tech tree visualization, workshop part comparison tools, combat HUD polish
-  - [ ] **Missile/drone designer screen redesign** (reference mockup provided during
-    Phase 2 development — see design notes below): replace the current
-    Phase 1/2A/2B functional-but-plain `WorkshopController` UI (currency bar,
-    linear tech-tree list, per-slot option buttons, plain-text stat readout) with
-    a sleek, modern, professional layout once Phase 2's full part breadth exists
-    to design against. Target layout:
-    - **Editable design name field** at the top of the screen (the mockup shows a
-      title like "3M22 Zircon Quasi-Ballistic Missile" with a subtitle — the
-      player should be able to name/rename their own design here, persisted with
-      the saved design).
-    - **Live 3D design preview, front and center**, replacing the plain
-      text-stats-only preview: the actual assembled model (reusing
-      `VehicleFactory`'s spawn pipeline / the "Modular 3D Mesh Swapping" system
-      from this doc's Concept Summary above — nose cone, seeker, engine,
-      wings/rotors, materials all reflecting the current part selection) shown
-      free-floating with mouse-drag rotate and scroll-wheel zoom, not just a
-      static icon.
-    - **Overlay stat card** anchored near the model (mockup shows a
-      semi-transparent "Missile Specifications" box: Length, Diameter, Range,
-      Flight ceiling, Payload) — a compact, glanceable summary distinct from the
-      fuller stat breakdown, styled to sit on top of the 3D viewport rather than
-      competing with it for a whole side panel.
-    - **Per-slot part pickers as labeled dropdowns/selectors** (mockup shows
-      "Engine: <Please Select>", "Seeker: <Please Select>" style rows) rather
-      than 2A's current always-expanded row-of-buttons-per-slot — more compact
-      and scales better as part counts per slot grow through Phase 2's breadth
-      work; should still show per-part mass/cost at a glance (e.g. in the
-      dropdown's option list) so "components and weight" stay visible without a
-      separate stats panel, per the reference.
-    - Overall visual language: dark professional/technical theme (dark
-      panels, clean sans-serif labels, subtle borders — closer to the reference
-      mockup's dark card layout than Phase 1's flat colored-rectangle buttons).
-    - This item intentionally supersedes/replaces (not stacks on top of) the
-      row-of-buttons part-picker UI built in 2A (`WorkshopController.BuildPartSlotRow`)
-      and the plain-text `RefreshDesignPreview` stat dump — those were explicitly
-      built as functional Phase 2 scaffolding ("ugly art is fine" precedent, Phase
-      2F's technical notes) to unblock part-breadth work, not as the final UI.
-
-- [ ] Art/audio pass: real models for parts (or modular part meshes), VFX for engines/explosions/countermeasures, SFX, music
+- [ ] Art/audio pass: real models for parts (or modular part meshes), VFX for
+  engines/explosions/countermeasures, SFX, music
 - [ ] Balance pass across all tiers (part stats, tech costs, mission difficulty curve)
-- [ ] Campaign/mission structure (progression of scenarios, not just skirmish)
-- [ ] Tutorial/onboarding flow
+- [ ] Campaign/mission structure (progression of scenarios, not just skirmish) — depends
+  on the still-outstanding Pre-Phase-3 Sandbox Campaign design deep-dive above, which
+  remains a prerequisite for the overworld-map implementation specifically, independent
+  of 3A–3D's reordering.
+- [ ] Tutorial/onboarding flow — natural to build once 3A's flow is final, so it doesn't
+  have to be redone if the flow changes shape.
+
+---
+
+#### 3F — Stabilization
 - [ ] Performance pass (many simultaneous projectiles/drones, LOD, object pooling)
 - [ ] Bug bash + QA pass
 

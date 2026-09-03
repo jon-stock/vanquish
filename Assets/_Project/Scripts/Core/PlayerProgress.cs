@@ -40,8 +40,8 @@ namespace Vanquish.Core
         public DroneLoadout PendingScoutDroneLoadout { get; set; }
 
         /// <summary>
-        /// Phase 2E: which scenario the player picked via ScenarioPickerOverlay in the
-        /// Workshop scene, if any. Same "in-memory, cross-scene-transient" pattern as
+        /// Phase 2E/3A: which scenario the player picked via WorkshopController's
+        /// in-UI scenario picker, if any. Same "in-memory, cross-scene-transient" pattern as
         /// the loadout fields above — null means "no selection, use WorkshopController.
         /// combatSceneName's single hardcoded default", which is what keeps
         /// Combat_Arena01 still reachable/testable without ever visiting a picker

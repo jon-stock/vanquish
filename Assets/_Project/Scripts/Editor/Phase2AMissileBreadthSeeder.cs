@@ -26,6 +26,86 @@ namespace Vanquish.EditorTools
         private const string MissilesDir = "Assets/_Project/Data/Missiles";
         private const string TechTreeDir = "Assets/_Project/Data/TechTree";
 
+        /// <summary>
+        /// Depth pass (direct user feedback: "some things are just too heavy to ever
+        /// be on a missile"): until now exactly one MissileAirframeDefinition existed
+        /// in the whole game (Phase1DataSeeder's Airframe_Basic, 40kg MTOW) — tuned
+        /// around the Tier-0 reference loadout (~30kg), but every heavier Tier1-4
+        /// engine/seeker/payload/module this file seeds above still had to fit inside
+        /// that same 40kg ceiling. A handful of legal higher-tier combinations
+        /// (e.g. Scramjet + Cluster + Multi-Spectral seeker, ~46kg with zero optional
+        /// modules) mathematically could not fit under any circumstances — the
+        /// Workshop's "Enter Combat" gate would simply refuse them forever, with no
+        /// bigger airframe a player could ever pick instead. Three more tiers here,
+        /// each meaningfully bigger/heavier/pricier (and progressively less
+        /// maneuverable/stealthy — a bigger airframe is a bigger radar target) than
+        /// the last, mirroring the drone airframe tier progression's own shape.
+        /// </summary>
+        [MenuItem("Vanquish/Phase 2A/Seed Missile Airframe Variants")]
+        public static void SeedAirframeVariants()
+        {
+            EnsureDir(MissilesDir);
+
+            CreateOrReplace<MissileAirframeDefinition>($"{MissilesDir}/Airframe_Interceptor.asset", a =>
+            {
+                a.id = "missile_airframe_interceptor";
+                a.displayName = "Interceptor Airframe";
+                a.category = PartCategory.MissileAirframe;
+                a.tier = TechTier.Tier1_Guided;
+                a.researchCost = 110;
+                a.buildCost = 70;
+                a.massKg = 3f;
+                a.dragCoefficient = 0.07f;
+                a.structuralMassKg = 10f;
+                a.maxGForce = 30f;
+                a.baseRadarCrossSection = 0.06f;
+                a.maxTemperatureCelsius = 300f;
+                a.maxTakeOffMassKg = 55f;
+            });
+
+            CreateOrReplace<MissileAirframeDefinition>($"{MissilesDir}/Airframe_HeavyStrike.asset", a =>
+            {
+                a.id = "missile_airframe_heavystrike";
+                a.displayName = "Heavy Strike Airframe";
+                a.category = PartCategory.MissileAirframe;
+                a.tier = TechTier.Tier2_Advanced;
+                a.researchCost = 190;
+                a.buildCost = 130;
+                a.massKg = 5f;
+                a.dragCoefficient = 0.09f;
+                a.structuralMassKg = 16f;
+                // Bigger/heavier airframe, genuinely less maneuverable ceiling than the
+                // Interceptor — carrying more mass isn't a strict upgrade.
+                a.maxGForce = 22f;
+                a.baseRadarCrossSection = 0.11f;
+                a.maxTemperatureCelsius = 450f;
+                a.maxTakeOffMassKg = 78f;
+            });
+
+            CreateOrReplace<MissileAirframeDefinition>($"{MissilesDir}/Airframe_Hypersonic.asset", a =>
+            {
+                a.id = "missile_airframe_hypersonic";
+                a.displayName = "Hypersonic Airframe";
+                a.category = PartCategory.MissileAirframe;
+                a.tier = TechTier.Tier4_Hypersonic;
+                a.researchCost = 320;
+                a.buildCost = 220;
+                a.massKg = 6f;
+                a.dragCoefficient = 0.05f; // slender, built for hypersonic cruise
+                a.structuralMassKg = 20f;
+                a.maxGForce = 18f; // least maneuverable of the four — pure speed/reach
+                a.baseRadarCrossSection = 0.04f;
+                a.maxTemperatureCelsius = 1600f; // needs to survive scramjet-class heating
+                a.maxTakeOffMassKg = 95f;
+            });
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.Log("[Phase2AMissileBreadthSeeder] Seeded Interceptor, Heavy Strike, and Hypersonic missile " +
+                "airframe variants under Assets/_Project/Data/Missiles/ (Airframe_Basic from Phase1DataSeeder " +
+                "covers the Tier-0 baseline). Not yet wired into the tech tree or Workshop picker — see class comment.");
+        }
+
         [MenuItem("Vanquish/Phase 2A/Seed Missile Payload Variants")]
         public static void SeedPayloadVariants()
         {
@@ -143,6 +223,7 @@ namespace Vanquish.EditorTools
                 e.burnTimeSeconds = 14f;
                 e.maxSpeedMetersPerSecond = 320f;
                 e.infraredSignature = 1.3f;
+                e.maneuverabilityMultiplier = 1f;
             });
 
             // Ramjet: air-breathing, so it doesn't need to carry its own oxidizer — lighter
@@ -166,6 +247,9 @@ namespace Vanquish.EditorTools
                 e.burnTimeSeconds = 25f;
                 e.maxSpeedMetersPerSecond = 680f;
                 e.infraredSignature = 2.5f;
+                // Optimized for sustained straight-line cruise, not hard corrections —
+                // see MissileEngineDefinition.maneuverabilityMultiplier.
+                e.maneuverabilityMultiplier = 0.85f;
             });
 
             // Scramjet: hypersonic-capable supersonic-combustion ramjet. Tier 4 exotic
@@ -187,6 +271,9 @@ namespace Vanquish.EditorTools
                 e.burnTimeSeconds = 18f;
                 e.maxSpeedMetersPerSecond = 1700f;
                 e.infraredSignature = 4f;
+                // The least agile of the four — built for raw hypersonic speed, not
+                // maneuvering — see MissileEngineDefinition.maneuverabilityMultiplier.
+                e.maneuverabilityMultiplier = 0.65f;
             });
 
             AssetDatabase.SaveAssets();
@@ -478,6 +565,14 @@ namespace Vanquish.EditorTools
                 return;
             }
 
+            // ---- Airframes: linear Interceptor -> Heavy Strike -> Hypersonic
+            // progression off the Tier-0 basic airframe node — each tier trades
+            // maneuverability/stealth for a bigger MTOW budget, not a strict
+            // upgrade. ----
+            var tnInterceptor = CreatePartTechNode(LoadPart<MissileAirframeDefinition>("Airframe_Interceptor"), tnMissileAirframe);
+            var tnHeavyStrike = CreatePartTechNode(LoadPart<MissileAirframeDefinition>("Airframe_HeavyStrike"), tnInterceptor);
+            CreatePartTechNode(LoadPart<MissileAirframeDefinition>("Airframe_Hypersonic"), tnHeavyStrike);
+
             // ---- Payloads: Grenade/Shaped Charge/Kinetic branch off the Tier-0
             // HE-Frag node directly; Cluster is a further upgrade off Shaped Charge. ----
             var tnGrenade = CreatePartTechNode(LoadPart<MissilePayloadDefinition>("Payload_Grenade"), tnMissilePayload);
@@ -515,7 +610,7 @@ namespace Vanquish.EditorTools
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Debug.Log("[Phase2AMissileBreadthSeeder] Seeded 18 TechNodes (TN_2A_*) gating the Phase 2A missile " +
+            Debug.Log("[Phase2AMissileBreadthSeeder] Seeded 21 TechNodes (TN_2A_*) gating the Phase 2A missile " +
                 "breadth variants under Assets/_Project/Data/TechTree/. Re-run Vanquish/Phase 1/Build Workshop " +
                 "Scene to pick these up in WorkshopController's tech tree list and part picker.");
         }

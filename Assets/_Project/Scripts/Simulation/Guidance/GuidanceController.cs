@@ -1,4 +1,5 @@
 using UnityEngine;
+using Vanquish.Combat;
 using Vanquish.Simulation.Flight;
 using Vanquish.Simulation.Sensors;
 
@@ -24,6 +25,30 @@ namespace Vanquish.Simulation.Guidance
 
         [Tooltip("If true, uses PursuitGuidance by default. Replace via SetGuidanceLaw for other laws once implemented.")]
         public bool useDefaultPursuit = true;
+
+        [Tooltip("Depth pass (direct user feedback: 'the basic missile always hits the target'): before this " +
+            "existed, the terminal guidance law ran unconditionally every tick regardless of range — a seeker's " +
+            "own detectionRangeMeters/fieldOfViewDegrees were computed and stored on MissileRuntimeStats but " +
+            "never actually gated whether guidance could see/correct toward the target at all. Set from the " +
+            "missile's own seeker stats at spawn (VehicleFactory) — defaults to 'unconstrained' (infinite " +
+            "range, full circle) so anything that doesn't explicitly configure these (tests, older code paths) " +
+            "keeps the old unconditional-homing behavior rather than silently going ballistic.")]
+        public float seekerRangeMeters = float.PositiveInfinity;
+
+        [Tooltip("Half-angle of the seeker's detection cone, in degrees (matches SeekerDefinition." +
+            "fieldOfViewDegrees's own convention) — outside this cone off the nose, the seeker can't see the " +
+            "target at all this tick, same real consequence real IR/radar/optical seekers have: a target that " +
+            "maneuvers hard enough to get outside the seeker's cone (especially once out near seekerRangeMeters, " +
+            "where angular tracking is hardest) breaks the shot.")]
+        public float seekerFieldOfViewDegrees = 180f;
+
+        [Tooltip("SeekerDefinition.countermeasureSusceptibility (0-1) — how easily THIS specific seeker is " +
+            "spoofed by a decoy, factored into the defending unit's own decoySuccessChance so seeker quality " +
+            "genuinely matters against countermeasures (a Multi-Spectral seeker shrugs off the same flare a " +
+            "basic IR seeker falls for). Defaults to 1 (fully susceptible, i.e. the old behavior where only " +
+            "the defender's own decoySuccessChance mattered) for anything that doesn't explicitly set it.")]
+        [Range(0f, 1f)]
+        public float countermeasureSusceptibility = 1f;
 
         private FlightBody _flightBody;
         private IGuidanceLaw _guidanceLaw;
@@ -58,6 +83,9 @@ namespace Vanquish.Simulation.Guidance
             if (CheckCountermeasureBreaksLock())
                 return;
 
+            if (!SeekerCanSeeTarget())
+                return; // out of range or off-boresight this tick — flies ballistic, no correction
+
             Vector3 targetVelocity = _targetRigidbody != null ? _targetRigidbody.linearVelocity : Vector3.zero;
             Vector3 selfVelocity = GetComponent<Rigidbody>().linearVelocity;
 
@@ -75,7 +103,9 @@ namespace Vanquish.Simulation.Guidance
         /// Queries the current target for a CountermeasureController and, if it's
         /// within threat range and its auto-defense cooldown has elapsed, lets it
         /// attempt a decoy deploy. Returns true (and breaks the lock) if the decoy
-        /// successfully spoofed this missile.
+        /// successfully spoofed this missile — weighted by this missile's own
+        /// seeker's countermeasureSusceptibility, not just the defender's raw
+        /// decoySuccessChance (see that field's own tooltip).
         /// </summary>
         private bool CheckCountermeasureBreaksLock()
         {
@@ -87,12 +117,34 @@ namespace Vanquish.Simulation.Guidance
             if (distance > countermeasures.threatRangeMeters)
                 return false;
 
-            if (!countermeasures.TryAutoDeployDecoy())
+            if (!countermeasures.TryAutoDeployDecoy(countermeasureSusceptibility))
                 return false;
 
             Debug.Log($"[Guidance] {name}'s lock on {target.name} broken by a decoy countermeasure.");
+            CountermeasureVisualEffect.SpawnFlareBurst(target.position);
             SetTarget(null);
             return true;
+        }
+
+        /// <summary>
+        /// Range + field-of-view gate — see seekerRangeMeters/seekerFieldOfViewDegrees'
+        /// own tooltips for why this exists. Pure geometry against the missile's
+        /// current nose direction (transform.forward), not the guidance law's
+        /// internal state, so it applies uniformly regardless of which IGuidanceLaw
+        /// is active.
+        /// </summary>
+        private bool SeekerCanSeeTarget()
+        {
+            Vector3 toTarget = target.position - transform.position;
+            float distance = toTarget.magnitude;
+            if (distance > seekerRangeMeters)
+                return false;
+
+            if (seekerFieldOfViewDegrees >= 180f || distance < 0.01f)
+                return true;
+
+            float angleOffBoresight = Vector3.Angle(transform.forward, toTarget);
+            return angleOffBoresight <= seekerFieldOfViewDegrees;
         }
     }
 }

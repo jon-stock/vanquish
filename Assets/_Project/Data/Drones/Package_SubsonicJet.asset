@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e4038a7c4d811db41af1590128ec33a0, type: 3}
+  m_Name: Package_SubsonicJet
+  m_EditorClassIdentifier: 
+  id: drone_propulsion_package_jet_subsonic
+  displayName: Subsonic Jet Package
+  description: "Fixed-wing turbofan propulsion \u2014 real cruise speed and altitude
+    ceiling, but needs forward airspeed to fly at all."
+  propulsion: {fileID: 11400000, guid: adb8e3f1bdcdf0d4a81d40df6414967a, type: 2}
+  engine: {fileID: 11400000, guid: 38d2d06aa1664734984c5a85e27f52ec, type: 2}

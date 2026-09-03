@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 16d63287ba9ea6a4cbe29fe2abdaf3f6, type: 3}
+  m_Name: Wing_FlyingWingKite
+  m_EditorClassIdentifier: 
+  id: drone_wing_flyingwingkite
+  displayName: Flying-Wing Kite Planform
+  description: 
+  icon: {fileID: 0}
+  category: 9
+  tier: 3
+  researchCost: 0
+  buildCost: 170
+  massKg: 7
+  prerequisites: []
+  liftSurfaceType: 4
+  liftCoefficient: 1.35
+  dragCoefficient: 0.032
+  turnRateDegreesPerSecond: 70
+  cruiseEfficiencyMultiplier: 1.3
+  rotorMaterial: 0
+  rotorSize: 0
+  structuralIntegrity: 1
+  zeroLiftAoADegrees: -2
+  referenceAoADegrees: 6
+  criticalAoADegrees: 24
+  inducedDragFactor: 0.016
