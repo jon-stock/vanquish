@@ -1,10 +1,12 @@
 using System;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using Vanquish.Combat;
 using Vanquish.Data;
 using Vanquish.Data.Support;
 using Vanquish.Simulation.Damage;
+using Vanquish.Theatre;
 
 namespace Vanquish.EditorTools
 {
@@ -41,6 +43,14 @@ namespace Vanquish.EditorTools
             TestEngagementControllerCommitAttackerStrikePipeline();
             TestStandingOrderExecutorSequencesDecoysFirst();
             TestSeekerControlModel();
+
+            // Phase 2
+            TestHexGridMovementCostAndFrontLine();
+            TestTheatreMovementReachableHexes();
+            TestSiteConstructionRepairRelocateLifecycle();
+            TestEconomicCollapseCondition();
+            TestTerritorialControlConditionSustain();
+            TestTheatreTurnControllerIntegration();
 
             if (_failures > 0)
             {
@@ -433,6 +443,160 @@ namespace Vanquish.EditorTools
             Expect(SeekerControlModel.RequiresActiveDesignation(SeekerType.LaserDesignated), "Laser-designated munitions require an active designator");
             Expect(SeekerControlModel.RequiresActiveDesignation(SeekerType.SemiActiveRadar), "Semi-active radar munitions require illumination");
             Expect(!SeekerControlModel.RequiresActiveDesignation(SeekerType.ActiveRadar), "Active radar seekers illuminate their own target");
+        }
+
+        private static void TestHexGridMovementCostAndFrontLine()
+        {
+            var grid = new HexGrid();
+            var playerHex = new HexCoordinate(0, 0);
+            var roadHex = new HexCoordinate(-1, 0);
+            var enemyHex = new HexCoordinate(1, 0);
+            var mountainHex = new HexCoordinate(0, -1);
+
+            grid.GetOrAddTile(playerHex, TerrainType.Open, TheatreFaction.Player);
+            grid.GetOrAddTile(roadHex, TerrainType.Road, TheatreFaction.Player);
+            grid.GetOrAddTile(enemyHex, TerrainType.Open, TheatreFaction.Enemy);
+            grid.GetOrAddTile(mountainHex, TerrainType.Mountain, TheatreFaction.Neutral);
+
+            Expect(Math.Abs(grid.GetTile(playerHex).MovementCostToEnter() - 1f) < 0.001f, "Open terrain should cost 1 to enter");
+            Expect(Math.Abs(grid.GetTile(roadHex).MovementCostToEnter() - 0.25f) < 0.001f, "Road terrain should be much cheaper to enter");
+            Expect(!grid.GetTile(mountainHex).IsPassable, "Mountain terrain should be impassable");
+
+            Expect(grid.IsFrontLineTile(playerHex), "Player hex adjacent to an enemy hex should be on the front line");
+            Expect(grid.IsFrontLineTile(enemyHex), "Enemy hex adjacent to a player hex should be on the front line");
+            Expect(!grid.IsFrontLineTile(roadHex), "Player hex only adjacent to other player/neutral hexes should not be on the front line");
+
+            Expect(HexCoordinate.Distance(playerHex, enemyHex) == 1, "Adjacent hexes should be distance 1 apart");
+        }
+
+        private static void TestTheatreMovementReachableHexes()
+        {
+            var grid = new HexGrid();
+            var start = new HexCoordinate(0, 0);
+            var roadStep1 = new HexCoordinate(1, 0);
+            var roadStep2 = new HexCoordinate(2, 0);
+            var openStep = new HexCoordinate(0, 1);
+            var mountainBlock = new HexCoordinate(3, 0);
+            var beyondMountain = new HexCoordinate(4, 0);
+
+            grid.GetOrAddTile(start, TerrainType.Open, TheatreFaction.Player);
+            grid.GetOrAddTile(roadStep1, TerrainType.Road, TheatreFaction.Player);
+            grid.GetOrAddTile(roadStep2, TerrainType.Road, TheatreFaction.Player);
+            grid.GetOrAddTile(openStep, TerrainType.Open, TheatreFaction.Player);
+            grid.GetOrAddTile(mountainBlock, TerrainType.Mountain, TheatreFaction.Neutral);
+            grid.GetOrAddTile(beyondMountain, TerrainType.Open, TheatreFaction.Neutral);
+
+            // Budget bottlenecked by the slowest unit in the army (PLAN.md rule) — a
+            // fast drone paired with a slow logistics element moves at 1.0/turn.
+            float armyBudget = TheatreMovement.ComputeArmyMovementBudget(new[] { 5f, 1f, 3f });
+            Expect(Math.Abs(armyBudget - 1f) < 0.001f, $"Army movement budget should be bottlenecked to the slowest unit (1.0), got {armyBudget}");
+
+            // Use a smaller, explicit budget here to clearly demonstrate "roads let you
+            // go further than open terrain for the same budget" — the whole point of
+            // the multi-front-reach mechanic.
+            const float testBudget = 0.6f;
+            var reachable = TheatreMovement.ComputeReachableHexes(grid, start, testBudget);
+
+            Expect(reachable.ContainsKey(start), "Start hex should always be reachable (cost 0)");
+            Expect(reachable.ContainsKey(roadStep1), "One road hex should be reachable within budget 0.6 (cost 0.25)");
+            Expect(reachable.ContainsKey(roadStep2), $"A SECOND road hex should be reachable within budget 0.6 (cumulative cost 0.5) — this is the 'roads let you reach further' mechanic, got hexes: {string.Join(",", reachable.Keys)}");
+            Expect(!reachable.ContainsKey(openStep), "Open terrain (cost 1.0) should NOT be reachable within budget 0.6 — same budget reaches much further along roads than through open terrain");
+            Expect(!reachable.ContainsKey(beyondMountain), "Hex beyond an impassable mountain should never be reachable regardless of budget");
+        }
+
+        private static void TestSiteConstructionRepairRelocateLifecycle()
+        {
+            Site site = Site.BeginConstruction(SiteType.Factory, TheatreFaction.Player, new HexCoordinate(0, 0), turnsToBuild: 2);
+            Expect(site.State == SiteState.UnderConstruction, "New site should start under construction");
+            Expect(!site.IsOperational, "Site under construction should not be operational");
+
+            site.Tick();
+            Expect(site.State == SiteState.UnderConstruction, "Site should still be under construction after 1 of 2 turns");
+
+            site.Tick();
+            Expect(site.IsOperational, "Site should become operational after enough construction turns");
+            Expect(Math.Abs(site.HealthFraction01 - 1f) < 0.001f, "Newly completed site should be at full health");
+
+            site.ApplyDamage(0.3f);
+            Expect(Math.Abs(site.HealthFraction01 - 0.7f) < 0.001f, $"Expected 70% health after 30% damage, got {site.HealthFraction01:P0}");
+            Expect(site.IsOperational, "A damaged-but-not-destroyed site should remain operational");
+
+            Expect(site.BeginRepair(2), "Should be able to begin repairing a damaged operational site");
+            Expect(site.State == SiteState.Repairing, "Site should now be repairing");
+            site.Tick();
+            site.Tick();
+            Expect(site.IsOperational, "Site should return to operational after repair completes");
+            Expect(Math.Abs(site.HealthFraction01 - 1f) < 0.001f, "Repaired site should be back to full health");
+
+            var newLocation = new HexCoordinate(5, 5);
+            Expect(site.BeginRelocation(newLocation, 1), "Should be able to begin relocating an operational site");
+            Expect(site.State == SiteState.Relocating, "Site should now be relocating");
+            Expect(site.Location.Equals(newLocation), "Relocation should update the site's location immediately");
+            site.Tick();
+            Expect(site.IsOperational, "Site should return to operational after relocation completes");
+
+            site.ApplyDamage(2f); // way more than 100% health
+            Expect(site.State == SiteState.Destroyed, "Site should be destroyed once health reaches zero");
+            site.Tick();
+            Expect(site.State == SiteState.Destroyed, "Ticking a destroyed site should be a no-op");
+        }
+
+        private static void TestEconomicCollapseCondition()
+        {
+            var grid = new HexGrid();
+            var world = new TheatreWorldState(grid);
+            world.Sites.Add(Site.BeginConstruction(SiteType.Factory, TheatreFaction.Player, new HexCoordinate(0, 0), 1));
+            world.Sites[0].Tick(); // now Operational
+
+            var condition = new EconomicCollapseCondition();
+            Expect(condition.Evaluate(world) == TheatreFaction.Player, "Enemy has zero factories at all — Player should win by economic collapse");
+
+            world.Sites.Add(Site.BeginConstruction(SiteType.Factory, TheatreFaction.Enemy, new HexCoordinate(1, 0), 3));
+            Expect(condition.Evaluate(world) == null, "Enemy now has a factory under construction — not yet collapsed, no winner");
+        }
+
+        private static void TestTerritorialControlConditionSustain()
+        {
+            var grid = new HexGrid();
+            grid.GetOrAddTile(new HexCoordinate(0, 0), TerrainType.Open, TheatreFaction.Player);
+            grid.GetOrAddTile(new HexCoordinate(1, 0), TerrainType.Open, TheatreFaction.Player);
+            grid.GetOrAddTile(new HexCoordinate(2, 0), TerrainType.Open, TheatreFaction.Player);
+            grid.GetOrAddTile(new HexCoordinate(3, 0), TerrainType.Open, TheatreFaction.Enemy);
+
+            var world = new TheatreWorldState(grid);
+            var condition = new TerritorialControlCondition(requiredFraction: 0.75f, requiredConsecutiveTurns: 2);
+
+            Expect(Math.Abs(grid.OwnershipFraction(TheatreFaction.Player) - 0.75f) < 0.001f, "Player should own exactly 75% of the 4 contestable hexes");
+
+            Expect(condition.Evaluate(world) == null, "First turn meeting the threshold should not win yet — needs to be sustained");
+            Expect(condition.Evaluate(world) == TheatreFaction.Player, "Second consecutive turn meeting the threshold should win for Player");
+        }
+
+        private static void TestTheatreTurnControllerIntegration()
+        {
+            var grid = new HexGrid();
+            grid.GetOrAddTile(new HexCoordinate(0, 0), TerrainType.Open, TheatreFaction.Player);
+            grid.GetOrAddTile(new HexCoordinate(1, 0), TerrainType.Open, TheatreFaction.Enemy);
+
+            var world = new TheatreWorldState(grid);
+            var factory = Site.BeginConstruction(SiteType.Factory, TheatreFaction.Player, new HexCoordinate(0, 0), turnsToBuild: 1);
+            world.Sites.Add(factory);
+
+            var controller = new TheatreTurnController(world, new ITheatreVictoryCondition[]
+            {
+                new EconomicCollapseCondition(),
+            });
+
+            Expect(controller.Result == TheatreResult.InProgress, "Fresh controller should be InProgress");
+
+            controller.AdvanceTurn(); // factory completes construction this tick, becomes Operational
+            Expect(factory.IsOperational, "Factory should be operational after its construction turn completes");
+            Expect(controller.Result == TheatreResult.PlayerVictory,
+                $"Enemy owns no factories at all — Player should win by economic collapse on the very first turn the condition is checked, got {controller.Result}");
+
+            int turnAfterWin = controller.CurrentTurn;
+            controller.AdvanceTurn();
+            Expect(controller.CurrentTurn == turnAfterWin, "AdvanceTurn should be a no-op once the game has already resolved");
         }
 
         private static T MakePart<T>(string id) where T : PartDefinition

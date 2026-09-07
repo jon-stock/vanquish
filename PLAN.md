@@ -603,78 +603,74 @@ in a playable scene.
 layer: front line, territory, intel, army building, production, and supply logistics,
 all turn-based, feeding into and out of combat instances.
 
-- [ ] **Hex grid data model**: per-hex terrain type (open/road-rail/impassable
-      mountain, etc. at minimum), per-hex movement cost, per-hex territory ownership.
-      Front line is derived each turn from ownership adjacency, not stored as its own
-      separate boundary object.
-- [ ] **Site placement/construction/repair/relocation**: sites (factory, warehouse,
-      base, radar, launch platform, recon station) are placed on a hex; construction
-      takes N turns before becoming operational; a damaged site can be repaired over
-      turns at a cost scaled to damage; relocating an existing site costs turns *and*
-      resources and leaves it offline/undefended for the duration — the most
-      expensive of the three actions by design.
-- [ ] **Army/supply movement over the hex grid**: relocation speed is capped by the
-      slowest/least capable unit in the army (reuses the range/endurance bottleneck
-      rule from Phase 0), with movement cost per hex sharply reduced along roads/rail
-      and blocked outright by impassable terrain — this is what lets a well-placed
-      rear site reach multiple front sectors while a poorly-placed one can't, without
-      needing a separate "multi-front reach" system.
-- [ ] Turn loop: player actions per turn (move/reinforce, research, build/repair/
-      relocate sites, recon), then choose to trigger a combat instance at a front-line
-      location or end turn.
-- [ ] Theatre-level tactics/taskings: standing orders issued to units or regions that
-      persist across turns rather than one-off actions, e.g. "survey this region,"
-      "keep available FPV drones on standby to strike targets of opportunity along
-      this stretch of front," "hold this warehouse's stock in reserve." These resolve
-      automatically each turn until changed or fulfilled.
-- [ ] Surveillance/intel system: recon reveals enemy composition/defenses at a
-      location before commit; unscouted engagements are riskier (fog-of-war at the
-      strategic layer, distinct from the existing tactical-layer `DetectionSensor`
-      fog-of-war).
-- [ ] **Theatre-based radar**: `RadarInstallationDefinition` scoped Theatre, placed on
-      the theatre map; grants its owner a strategic surveillance/intel bonus in its
-      coverage area plus a detection-range/quality bonus applied to any combat
-      instance fought there. Unconfirmed/hidden until scouted, same as other
-      unscouted theatre assets above.
-- [ ] **Radar site** as a strikeable combat-instance target type: lets the player (or
-      AI opponent) run a dedicated SEAD strike against a found theatre-based radar
-      *before* committing to the target it was covering — the only way to remove a
-      theatre radar's bonus, since it cannot be destroyed as a side-effect of an
-      unrelated instance (see [Radar & SEAD](#radar--sead)).
-- [ ] Production & logistics simulation: factories generate stockpile over turns,
-      supply lines move it toward the front, warehouses bank it — and each of these
-      is literally the object being fought over in a combat instance targeting that
-      type.
-- [ ] Feedback loop: combat instance results (objective destroyed/damaged, stockpile
-      spent) write back into theatre-map state (reduced production, disrupted
-      supply, depleted stock, territory/front-line shift).
-- [ ] Army building UI: assign part designs + tech-tree unlocks to what a region can
-      produce/station (this absorbs the old "Workshop mode" design activity).
-- [ ] **Personnel system**: hireable operator roster (recruit, assign to a base and a
-      drone-type category), per-category experience/rank progression, and stat
-      bonuses (accuracy/reaction/tactics access) over AI baseline for whatever
-      category they're assigned to. Extend `SaveData` with an operator roster.
-- [ ] **Bases as theatre-map entities**: buildable/upgradeable structures that house
-      operators; tech-tree upgrade to relocate a base further from the front line
-      (trades safety against the range/endurance bottleneck rule — a base further
-      back means a longer trip to the front for its units).
-- [ ] **Base destruction consequence**: wire the existing "Base" combat-instance
-      target type (Phase 0/1) up to real stakes — a destroyed base permanently kills
-      its stationed operators (and their accumulated rank/experience) with no
-      insurance/evacuation mechanic, and reduces the owning side's local combat power.
-- [ ] Army building UI extension: assign specific hired operators (not just AI) to
-      specific units/loadouts before a combat instance.
-- [ ] Basic theatre-level AI opponent: decides where to reinforce, what to build, and
-      when/where to attack across the front.
-- [ ] **Strategic victory/defeat conditions**: implement economic collapse (zero
-      operational factories + none under construction), territorial control (>=X% of
-      contestable hexes, sustained), and dominance project (a top-tier tech-gated
-      capstone build at a site, completable to win, attackable like any other site) as
-      pluggable, scenario-selectable turn-end checks — see
-      [Strategic Victory & Defeat Conditions](#strategic-victory--defeat-conditions).
-      At minimum wire up economic collapse and territorial control for the Phase 2
-      exit slice; the dominance project can land alongside Phase 3's top-tier content
-      if the underlying tech tier doesn't exist yet.
+- [x] **Hex grid data model**: `HexCoordinate` (axial, engine-agnostic),
+      `TerrainType` (Open/Road/Mountain), `TheatreFaction` (Neutral/Player/Enemy),
+      `HexTile`, `HexGrid`. Front line is derived on demand
+      (`HexGrid.IsFrontLineTile`/`FrontLineTiles`) from ownership adjacency, never
+      stored as its own object, so it can't desync from actual territory state.
+- [x] **Site placement/construction/repair/relocation**: `Site` (plain C#, not a
+      MonoBehaviour — this is simulation state a future UI visualizes) implements the
+      full turn-based lifecycle: `BeginConstruction`/`Tick` (N turns to become
+      Operational), `BeginRepair` (damaged-but-alive sites only), `BeginRelocation`
+      (Operational-only, moves immediately but goes offline for N turns — the most
+      expensive action, per plan), and `ApplyDamage` (a ready-made hook for the
+      still-deferred combat-instance feedback loop, see below).
+- [x] **Army/supply movement over the hex grid**: `TheatreMovement.ComputeArmyMovementBudget`
+      (min-speed bottleneck, same rule as `Combat.StrikePackageRange`) and
+      `ComputeReachableHexes` (Dijkstra, respects road/open/impassable movement cost).
+      Proven in the smoke test: the same movement budget reaches much further along a
+      road than through open terrain, and never crosses a mountain — this is the
+      entire mechanism behind "a well-placed rear site can service multiple fronts,"
+      with no separate multi-front-reach system needed.
+- [x] **Strategic victory/defeat conditions**: `ITheatreVictoryCondition` +
+      `EconomicCollapseCondition` (zero Operational-or-recoverable factories) +
+      `TerritorialControlCondition` (>=X% hexes, sustained N consecutive turns,
+      stateful) — both pluggable/scenario-selectable per the plan, wired together by
+      `TheatreTurnController`. Dominance project still deferred to Phase 3 (needs the
+      top-tier tech tree).
+- [x] A minimal **production tick** (`TheatreTurnController.RunProductionTick`):
+      Operational factories add a flat resource amount to their owner's pool each
+      turn — a deliberately simple stand-in for the fuller production/logistics
+      simulation below, just enough to make "economic collapse" mean something.
+- [ ] Turn loop with **player actions** (research, recon, choosing where to engage).
+      **Partially done**: `TheatreTurnController.AdvanceTurn()` is the turn-resolution
+      engine (ticks sites, runs production, evaluates victory), proven interactively
+      in the new debug harness. **Not done**: there's no actual player-action menu —
+      that's a UI concern, deferred with the rest of the UI work below.
+- [ ] Theatre-level tactics/taskings (survey/FPV-standby/hold-in-reserve orders).
+      **Deferred** — meaningfully needs the surveillance/intel system below first
+      (an order like "survey this region" is meaningless without fog-of-war to lift).
+- [ ] Surveillance/intel system (strategic fog-of-war). **Deferred** — a substantial
+      system in its own right; also blocks theatre-based radar below.
+- [ ] **Theatre-based radar** / **Radar site** target type. **Deferred**, same reason
+      as Phase 1's battlefield radar/ESM — these depend on each other and on the
+      intel system above, and deserve their own focused pass.
+- [ ] Full production & logistics simulation (supply lines moving stock along roads,
+      warehouses banking it, interdiction). **Deferred** — only the minimal flat
+      per-turn factory production above exists; no routing/logistics network yet.
+- [ ] Feedback loop: combat instance results writing back into theatre-map state.
+      **Deferred**, but `Site.ApplyDamage` exists specifically so this is a wiring
+      task (read an `EngagementController`'s result, call `ApplyDamage` on the
+      matching `Site`) rather than new modeling work, when it's tackled.
+- [ ] Army building UI / **Personnel system** (hireable operators, rank, permadeath) /
+      **Base destruction consequence** / theatre-level AI opponent. **All deferred**
+      — no UI exists yet at all (consistent with Phase 1), and personnel is a
+      substantial system (hiring economy, rank progression, `SaveData` roster
+      extension) that deserves its own pass rather than being bolted on. `Site`'s
+      `ApplyDamage`/`Destroyed` state is the ready-made hook for "base destroyed kills
+      its operators" once personnel exists.
+
+**Note on scope this pass:** same approach as Phases 0/1 — built the pure logic/data
+foundations (hex grid, sites, movement, turn resolution, victory conditions) and
+proved them via the same headless `SmokeTest`, then added an interactive
+`TheatreDebugHarness` (see `AGENTS.md`) so the turn loop, production tick, and both
+victory conditions can actually be clicked through and watched resolve. Did **not**
+attempt intel/fog-of-war, theatre radar, full logistics, the combat↔theatre feedback
+loop, personnel, or any UI — each is either a substantial system best tackled in its
+own focused pass, or blocked on one of the others (radar needs intel; taskings need
+radar/intel; personnel needs a UI to be worth building). `Site.ApplyDamage` is a
+deliberately-placed hook so the feedback loop and personnel/base-destruction can be
+wired on top of what exists here without rework.
 
 **Exit criteria:** A full turn loop exists — scout, build, decide where to engage,
 fight a combat instance, see the result change the map — on a hex grid large enough to
@@ -682,7 +678,11 @@ have at least two distinct front-line sectors, with terrain/roads visibly affect
 fast each side can reinforce them, using tier 0–1 content throughout, including at
 least one hired operator who can gain rank and can be killed if their base falls, and
 at least one strategic victory condition (economic collapse or territorial control)
-able to end the game.
+able to end the game. **Not yet met in full**: the hex grid/movement/site-lifecycle/
+victory-condition core is built and interactively provable (`TheatreDebugHarness`),
+but "scout," a real player-action turn menu, and personnel/base-destruction stakes are
+not yet implemented — this phase's foundational data model is believed stable for
+those to build on without rework.
 
 ---
 

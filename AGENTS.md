@@ -68,6 +68,22 @@ changes shape, via:
   -executeMethod Vanquish.EditorTools.SceneBuilder.BuildPhase1DebugScene -quit
 ```
 
+There's a second harness for the Phase 2 theatre-map logic (hex grid, sites, turn
+resolution, victory conditions):
+
+```
+Assets/_Project/Scenes/Phase2_TheatreDebugHarness.unity
+Assets/_Project/Scripts/Theatre/Debug/TheatreDebugHarness.cs
+```
+
+Same idea — open the scene, press Play, step turns and trigger either victory
+condition (economic collapse or sustained territorial control) via the OnGUI buttons.
+Regenerate via `Vanquish.EditorTools.SceneBuilder.BuildPhase2DebugScene`.
+
+`SceneBuilder` now has a shared `BuildSingleComponentScene<T>` helper — add new
+one-component debug-harness scenes for future phases the same way rather than
+duplicating the create/save/exit boilerplate.
+
 ## Commit policy
 
 Commit changes to git (and push to `origin`) after each set of changes you make to
