@@ -587,14 +587,20 @@ real theatre map.
       what's actually running under the hood (`WeaponController` reads/spends ammo
       directly from `EngagementController`'s `Stockpile` — one source of truth, not a
       duplicate ammo counter — and `MissileImpact` applies damage via
-      `IDamageable.TakeDamage`, not a flat health value). **Not yet done**: dropping
-      into/out of manual control of *specific* committed units when there's more than
-      one (only a single player-piloted drone exists in this scene so far — the
-      "drop into any committed unit, hand it back to AI/standing orders" model from
-      the Command & Control Model section needs AI-controlled units to hand control
-      between, which don't exist in-scene yet); fixed-wing/jet control scheme (the
-      pre-pivot project has one, deliberately not ported — out of scope for tier 0/1
-      multirotors). Visual follow-up: `DroneVisualBuilder` now more closely matches
+      `IDamageable.TakeDamage`, not a flat health value). **Multi-unit follow-up**:
+      dropping into/out of manual control of *specific* committed units now works —
+      the scene has two independently-piloted units (a quadcopter and a hexacopter,
+      each with its own missile stockpile via distinct `StockpileEntry` part ids in
+      one shared `EngagementController`), switchable with number keys 1/2
+      (`PlayerUnitSwitcher`; the inactive unit holds position rather than drifting),
+      with the camera automatically following whichever is active and a V-toggled
+      third mode that looks at the objective instead (`CameraModeController`), plus
+      an "available units" bottom bar (`UnitRosterHud`). **Still not done**: handing
+      control to/from an *AI-controlled* unit specifically (both units here are
+      player-controllable, not one player + one AI teammate — that needs the AI
+      executor work already deferred above) and the fixed-wing/jet control scheme
+      (the pre-pivot project has one, deliberately not ported — out of scope for tier
+      0/1 multirotors). Visual follow-up: `DroneVisualBuilder` now more closely matches
       that project's multirotor silhouette (body + N arms in an "X" configuration,
       each with a spinning rotor, plus hardpoint-mounted missile props that visually
       deplete per shot via `MountedMissileVisuals`), and a `DroneRotorConfiguration`

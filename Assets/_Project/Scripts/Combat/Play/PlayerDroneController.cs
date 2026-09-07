@@ -25,6 +25,13 @@ namespace Vanquish.Combat.Play
                  "simulating a quadcopter's auto-hover rather than coasting/drifting on weak passive drag alone.")]
         public float brakingForce = 80f;
 
+        [Tooltip(
+            "Whether this unit currently accepts WASD/mouse input — set by PlayerUnitSwitcher when " +
+            "multiple controllable units exist (only one is 'active'/piloted at a time). An inactive " +
+            "unit still actively hovers in place (see FixedUpdate) rather than drifting, it just can't " +
+            "be steered or fire until switched back to.")]
+        public bool IsActive = true;
+
         private FlightBody _flightBody;
         private WeaponController _weapon;
         private Rigidbody _rigidbody;
@@ -44,12 +51,18 @@ namespace Vanquish.Combat.Play
             Vector2 rawInput = Vector2.zero;
             float verticalInput = 0f;
 
-            if (Input.GetKey(KeyCode.W)) rawInput += Vector2.up;
-            if (Input.GetKey(KeyCode.S)) rawInput += Vector2.down;
-            if (Input.GetKey(KeyCode.A)) rawInput += Vector2.left;
-            if (Input.GetKey(KeyCode.D)) rawInput += Vector2.right;
-            if (Input.GetKey(KeyCode.Space)) verticalInput += 1f;
-            if (Input.GetKey(KeyCode.LeftShift)) verticalInput -= 1f;
+            // An inactive (not currently piloted) unit reads no input at all — it
+            // falls straight through to the hover-brake below, so switching away
+            // from a unit leaves it holding position rather than drifting.
+            if (IsActive)
+            {
+                if (Input.GetKey(KeyCode.W)) rawInput += Vector2.up;
+                if (Input.GetKey(KeyCode.S)) rawInput += Vector2.down;
+                if (Input.GetKey(KeyCode.A)) rawInput += Vector2.left;
+                if (Input.GetKey(KeyCode.D)) rawInput += Vector2.right;
+                if (Input.GetKey(KeyCode.Space)) verticalInput += 1f;
+                if (Input.GetKey(KeyCode.LeftShift)) verticalInput -= 1f;
+            }
 
             Vector3 input = CameraRelativeDirection(rawInput) + Vector3.up * verticalInput;
 
@@ -88,7 +101,7 @@ namespace Vanquish.Combat.Play
 
         private void Update()
         {
-            if (_weapon == null || !Input.GetMouseButtonDown(0))
+            if (!IsActive || _weapon == null || !Input.GetMouseButtonDown(0))
                 return;
 
             _weapon.Fire();

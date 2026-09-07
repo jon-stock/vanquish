@@ -619,20 +619,26 @@ namespace Vanquish.EditorTools
 
                 var controller = UnityEngine.Object.FindFirstObjectByType<EngagementController>();
                 Expect(controller != null, "FlightTestHarness.Build should create an EngagementController");
-                Expect(controller != null && controller.Attacker.RemainingCount("flighttest.missile") == 4, "Attacker stockpile should start with 4 missiles");
+                Expect(controller != null && controller.Attacker.RemainingCount("flighttest.quad.missile") == 4, "Quad stockpile should start with 4 missiles");
+                Expect(controller != null && controller.Attacker.RemainingCount("flighttest.hex.missile") == 4, "Hex stockpile should start with 4 missiles");
                 Expect(controller != null && controller.Objective != null && ReferenceEquals(controller.Objective, objective), "EngagementController's objective should be the same BaseObjective instance");
 
-                var weapon = UnityEngine.Object.FindFirstObjectByType<WeaponController>();
-                Expect(weapon != null, "FlightTestHarness.Build should create a drone with a WeaponController");
-                Expect(weapon != null && weapon.target == objective.transform, "Weapon's target should be the objective");
-                Expect(weapon != null && weapon.CanFire, "Weapon should be able to fire immediately (full ammo, no cooldown)");
+                GameObject quadGo = GameObject.Find("Quadcopter");
+                GameObject hexGo = GameObject.Find("Hexacopter");
+                Expect(quadGo != null, "FlightTestHarness.Build should create a 'Quadcopter' unit");
+                Expect(hexGo != null, "FlightTestHarness.Build should create a 'Hexacopter' unit");
 
-                var drone = weapon.GetComponent<FlightBody>();
-                Expect(drone != null, "Player drone should have a FlightBody");
-                Expect(drone != null && !drone.orientToVelocity, "Multirotor drone's FlightBody should have orientToVelocity disabled");
+                WeaponController quadWeapon = quadGo?.GetComponent<WeaponController>();
+                WeaponController hexWeapon = hexGo?.GetComponent<WeaponController>();
+                Expect(quadWeapon != null && quadWeapon.missilePartId == "flighttest.quad.missile", "Quad's weapon should use the quad-specific part id");
+                Expect(hexWeapon != null && hexWeapon.missilePartId == "flighttest.hex.missile", "Hex's weapon should use the hex-specific part id");
+                Expect(quadWeapon != null && quadWeapon.target == objective.transform, "Quad's weapon target should be the objective");
 
-                var playerController = weapon.GetComponent<PlayerDroneController>();
-                Expect(playerController != null, "Player drone should have a PlayerDroneController");
+                FlightBody quadFlightBody = quadGo?.GetComponent<FlightBody>();
+                Expect(quadFlightBody != null && !quadFlightBody.orientToVelocity, "Multirotor drone's FlightBody should have orientToVelocity disabled");
+
+                Expect(quadGo?.GetComponent<PlayerDroneController>() != null, "Quad should have a PlayerDroneController");
+                Expect(hexGo?.GetComponent<PlayerDroneController>() != null, "Hex should have a PlayerDroneController");
 
                 var camera = UnityEngine.Object.FindFirstObjectByType<Camera>();
                 Expect(camera != null, "FlightTestHarness.Build should create a camera");
@@ -640,18 +646,48 @@ namespace Vanquish.EditorTools
                 var hud = UnityEngine.Object.FindFirstObjectByType<FlightHUD>();
                 Expect(hud != null, "FlightTestHarness.Build should create a FlightHUD");
 
-                var mountedVisuals = weapon.GetComponent<MountedMissileVisuals>();
-                Expect(mountedVisuals != null, "Drone should have MountedMissileVisuals");
-                Expect(mountedVisuals != null && mountedVisuals.MountedCount == 4, "Drone should start with 4 visibly mounted missile props (one per hardpoint)");
+                var switcher = UnityEngine.Object.FindFirstObjectByType<PlayerUnitSwitcher>();
+                Expect(switcher != null, "FlightTestHarness.Build should create a PlayerUnitSwitcher");
+                Expect(switcher != null && switcher.ActiveIndex == 0, "Quad (index 0) should be active by default");
+                Expect(quadGo?.GetComponent<PlayerDroneController>().IsActive == true, "Quad should be active by default");
+                Expect(hexGo?.GetComponent<PlayerDroneController>().IsActive == false, "Hex should NOT be active by default");
 
-                // Actually firing should consume stockpile AND remove one mounted
-                // visual — exercises the real WeaponController -> EngagementController
-                // -> Stockpile pipeline, and the visual-depletion wiring, end-to-end,
-                // same as a mouse click would in Play mode.
-                bool fired = weapon.Fire();
-                Expect(fired, "Weapon.Fire() should succeed with full ammo and a valid target");
-                Expect(controller.Attacker.RemainingCount("flighttest.missile") == 3, "Firing once should consume one missile from the stockpile");
-                Expect(mountedVisuals != null && mountedVisuals.MountedCount == 3, "Firing once should visually remove one mounted missile prop");
+                var cameraMode = UnityEngine.Object.FindFirstObjectByType<CameraModeController>();
+                Expect(cameraMode != null, "FlightTestHarness.Build should create a CameraModeController");
+
+                // Switching units should hand camera-follow over to the newly active unit.
+                switcher.SetActive(1);
+                Expect(switcher.ActiveIndex == 1, "Switching to index 1 should update ActiveIndex");
+                Expect(hexGo.GetComponent<PlayerDroneController>().IsActive, "Hex should become active after switching");
+                Expect(!quadGo.GetComponent<PlayerDroneController>().IsActive, "Quad should become inactive after switching away");
+                var chaseCamera = UnityEngine.Object.FindFirstObjectByType<ChaseCamera>();
+                Expect(chaseCamera != null && chaseCamera.primary == hexGo.transform, "Camera should follow the newly active unit (hex) after switching");
+                Expect(!cameraMode.IsObjectiveView, "Switching units should return the camera to follow mode, not objective view");
+
+                cameraMode.ToggleObjectiveView();
+                Expect(cameraMode.IsObjectiveView, "Toggling should enter objective view");
+                Expect(chaseCamera.primary == objective.transform && chaseCamera.secondary == null, "Objective view should point the camera at the objective alone");
+                cameraMode.ToggleObjectiveView();
+                Expect(!cameraMode.IsObjectiveView && chaseCamera.primary == hexGo.transform, "Toggling again should return to following the active unit");
+
+                switcher.SetActive(0); // back to quad for the ammo-independence check below
+
+                var roster = UnityEngine.Object.FindFirstObjectByType<UnitRosterHud>();
+                Expect(roster != null && roster.entries.Count == 2, "UnitRosterHud should list both units");
+
+                var quadMountedVisuals = quadGo.GetComponent<MountedMissileVisuals>();
+                var hexMountedVisuals = hexGo.GetComponent<MountedMissileVisuals>();
+                Expect(quadMountedVisuals != null && quadMountedVisuals.MountedCount == 4, "Quad should start with 4 visibly mounted missile props");
+                Expect(hexMountedVisuals != null && hexMountedVisuals.MountedCount == 4, "Hex should start with 4 visibly mounted missile props");
+
+                // Firing the quad should consume ONLY the quad's stockpile/visuals —
+                // the whole point of giving each unit its own part id.
+                bool fired = quadWeapon.Fire();
+                Expect(fired, "Quad's Weapon.Fire() should succeed with full ammo and a valid target");
+                Expect(controller.Attacker.RemainingCount("flighttest.quad.missile") == 3, "Firing the quad should consume one quad missile");
+                Expect(controller.Attacker.RemainingCount("flighttest.hex.missile") == 4, "Firing the quad should NOT touch the hex's stockpile");
+                Expect(quadMountedVisuals.MountedCount == 3, "Firing the quad should visually remove one of ITS mounted missile props");
+                Expect(hexMountedVisuals.MountedCount == 4, "Firing the quad should NOT remove any of the hex's mounted missile props");
 
                 var spawnedMissile = UnityEngine.Object.FindFirstObjectByType<MissileImpact>();
                 Expect(spawnedMissile != null, "Firing should spawn a missile with a MissileImpact component");
@@ -664,8 +700,9 @@ namespace Vanquish.EditorTools
                 foreach (string goName in new[]
                          {
                              "SmokeTest_FlightTestHarness", "Ground", "Directional Light",
-                             "Objective (Base)", "EngagementController", "Player Drone",
-                             "Main Camera", "HUD", "Missile",
+                             "Objective (Base)", "EngagementController", "Quadcopter", "Hexacopter",
+                             "Main Camera", "CameraModeController", "PlayerUnitSwitcher",
+                             "HUD", "UnitRosterHud", "Missile",
                          })
                 {
                     GameObject found = GameObject.Find(goName);

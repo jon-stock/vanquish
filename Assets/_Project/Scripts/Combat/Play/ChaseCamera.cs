@@ -15,8 +15,10 @@ namespace Vanquish.Combat.Play
         public Transform secondary;
 
         public Vector3 baseOffsetDirection = new Vector3(-1f, 0.6f, -0.6f);
-        public float minDistance = 15f;
-        public float distancePadding = 10f;
+
+        [Tooltip("Tuned for ~1-2m-scale drones/objectives — close enough that the unit actually fills a meaningful part of the screen instead of reading as a tiny distant blob.")]
+        public float minDistance = 6f;
+        public float distancePadding = 5f;
         public float followSmoothing = 3f;
 
         [Header("Orbit / Zoom Control")]

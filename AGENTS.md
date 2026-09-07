@@ -115,12 +115,19 @@ physics collisions that way.
 
 The drone visual (body/arms/spinning rotors/mounted-missile props that visually
 deplete per shot — `DroneVisualBuilder`/`MountedMissileVisuals`) is built to more
-closely match the pre-pivot project's multirotor silhouette. `FlightTestHarness`
-exposes a public `rotorConfiguration` field
-(`Vanquish.Combat.Play.DroneRotorConfiguration`: `Quadcopter` or `Hexacopter`) —
-quadcopter is Phase 1's focus, but the hexacopter is kept one flip away (same visual
-builder, just a different rotor count) for whenever a heavier-lift/higher-tier design
-is needed.
+closely match the pre-pivot project's multirotor silhouette (plus a nose canopy/
+sensor pod and landing legs for a less "plain box" look).
+
+The scene now has **two independently-controllable units** — a quadcopter and a
+hexacopter (`Vanquish.Combat.Play.DroneRotorConfiguration`: same visual builder, just
+a different rotor count) — each with its **own missile stockpile** (distinct
+`StockpileEntry` part ids in one shared `EngagementController`, so firing one never
+touches the other's ammo). Press **1**/**2** to switch which one you're piloting
+(`PlayerUnitSwitcher`); the inactive unit holds position rather than drifting. The
+camera automatically follows whichever unit is active, and **V** toggles a third
+camera mode that looks at the objective instead (`CameraModeController`). An
+"available units" bar across the bottom of the screen (`UnitRosterHud`) shows each
+unit's label, remaining missiles, and which one is currently active.
 
 ## Commit policy
 
