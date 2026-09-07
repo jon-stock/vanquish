@@ -39,6 +39,35 @@ runs) means something needs fixing before moving on. Extend `SmokeTest.Run` with
 assertions as new gameplay logic is added, rather than only relying on compilation
 succeeding.
 
+If `Assets/_Project/Scripts/**` fails to compile in a way that looks stale/wrong
+(references a file/path that was already moved or deleted), delete the gitignored
+`Library/` folder to force a full reimport before assuming the code itself is broken
+— Unity's cached asset database can lag behind manual file moves done outside the
+Editor.
+
+### Interactive debug harness (press Play and click things)
+
+There's no real gameplay scene yet (no flight/spawning/UI), but there is a
+click-through debug harness for the Phase 0/1 combat-instance logic:
+
+```
+Assets/_Project/Scenes/Phase1_DebugHarness.unity
+Assets/_Project/Scripts/Combat/Debug/EngagementDebugHarness.cs
+```
+
+Open that scene in the Editor and press Play — it builds its own objective,
+attacker/defender stockpiles, and point-defense battery in code at `Start()`, then
+draws an OnGUI panel with buttons to commit decoy vs. real strikes and watch the
+stockpile-drain tactic, damage/hardness soft-cap, and win conditions play out live.
+Regenerate this scene (rather than hand-editing it) if the harness's setup logic
+changes shape, via:
+
+```powershell
+& "C:\Users\Jon.Stock\UnityEditors\6000.0.5f1\Editor\Unity.exe" `
+  -batchmode -nographics -projectPath "<repo root>" `
+  -executeMethod Vanquish.EditorTools.SceneBuilder.BuildPhase1DebugScene -quit
+```
+
 ## Commit policy
 
 Commit changes to git (and push to `origin`) after each set of changes you make to
