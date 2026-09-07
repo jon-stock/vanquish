@@ -111,6 +111,17 @@ Kept, and why:
   detection, resolved in real time until one side's objective/stockpile is spent."
   Kept as-is; extended with `IDamageable`, proportional nav, and stockpile-aware
   spawning as instances mature.
+- **Player-control/procedural-visual layer, pulled from the `pre-pivot-old-plan` git
+  tag** (`Combat/Play/*` — `PlayerDroneController`, `WeaponController`,
+  `MissileBurnController`, `ChaseCamera`, `RotorSpinner`, `QuadcopterTiltVisual`,
+  `DroneVisualBuilder`, `MissileFactory`) — that project's multirotor flight-control
+  scheme and "no imported art, build everything from Unity primitives" visual
+  convention transferred directly; only its damage/objective plumbing needed
+  rewiring, from its old `CombatManager`/`Health`/`IObjective` onto this pivot's
+  `EngagementController`/`Damageable`/`IObjective` (same name, different/better
+  shape — this pivot's version has the payload/hardness soft-cap model that one
+  didn't). See [Phase 1](#phase-1--combat-instance-mvp-all-target-types-attack--defense)
+  and `AGENTS.md` for the resulting scene.
 - **Save system** (`Core/SaveSystem.cs`, `Core/SaveData.cs`) — kept, but `SaveData`
   will need new fields for theatre state (territory, front line, stockpiles,
   production) once Phase 2 starts. Combat-instance-only saves (Phase 0/1) can reuse
@@ -546,16 +557,44 @@ real theatre map.
       engages which incoming type, at what range) and a full scripted-scenario
       opponent — these need real spawned units in a scene to mean anything (see
       note below).
-- [ ] Surface the stockpile economy in the UI clearly. **Not started** — there is no
-      UI at all yet; needs a real scene (see note below).
+- [~] Surface the stockpile economy in the UI clearly. A real scene now exists (see
+      below) with a live HUD (`FlightHUD`) showing missiles remaining, target health/
+      destroyed %, and engagement result. **Not yet done**: the "show what the
+      defender just expended responding to a decoy" indicator specifically — there's
+      no defender point-defense present in the flight scene yet to expend anything
+      (the flight-test target is undefended, matching the simplest "Base" profile).
 - [x] Expand the battlefield-tactics layer: `StandingOrderExecutor` adds ordered
       commit-priority sequencing on top of Phase 0's bare `AttackNow`/`Hold`. Richer
       rules (engagement range/altitude for point defense) are deferred until there
       are real flying units with positions to reason about.
-- [ ] Build the **direct control** layer (third-person manual flight control rig).
-      **Deliberately deferred** — this fundamentally needs a camera, input, and a
-      scene to be anything other than inert code; not worth building blind. Priority
-      for the first pass once a scene/prefabs exist.
+- [x] Build the **direct control** layer (third-person manual flight control rig) —
+      **no longer deferred**. A real, playable 3D combat instance now exists
+      (`Assets/_Project/Scenes/Phase1_FlightTest.unity` /
+      `Assets/_Project/Scripts/Combat/Play/*`): a flyable multirotor drone (WASD +
+      Space/Shift altitude, camera-relative, matching a real quadcopter's
+      vectored-thrust hover) fires real missiles (`MissileFactory` — `FlightBody` +
+      `GuidanceController`/`PursuitGuidance` + `MissileBurnController`) at a physical,
+      destructible `BaseObjective`, with a right-drag/scroll `ChaseCamera` and an
+      OnGUI `FlightHUD`. This **reuses/adapts the pre-pivot project's flight-control
+      and procedural-visual layer** (see the `pre-pivot-old-plan` git tag and
+      `AGENTS.md`) — `PlayerDroneController`, `WeaponController`,
+      `MissileBurnController`, the chase camera, `RotorSpinner`/`QuadcopterTiltVisual`,
+      and its "no imported art, build everything from Unity primitives" convention —
+      ported from the new Input System to legacy `UnityEngine.Input`, and rewired
+      from that project's old `CombatManager`/`Health` onto this pivot's
+      `EngagementController`/`BaseObjective`/`Damageable`, so the exact same
+      stockpile-economy and payload/hardness-soft-cap logic proven in `SmokeTest` is
+      what's actually running under the hood (`WeaponController` reads/spends ammo
+      directly from `EngagementController`'s `Stockpile` — one source of truth, not a
+      duplicate ammo counter — and `MissileImpact` applies damage via
+      `IDamageable.TakeDamage`, not a flat health value). **Not yet done**: dropping
+      into/out of manual control of *specific* committed units when there's more than
+      one (only a single player-piloted drone exists in this scene so far — the
+      "drop into any committed unit, hand it back to AI/standing orders" model from
+      the Command & Control Model section needs AI-controlled units to hand control
+      between, which don't exist in-scene yet); fixed-wing/jet control scheme (the
+      pre-pivot project has one, deliberately not ported — out of scope for tier 0/1
+      multirotors).
 - [x] Extend `SeekerType`/guidance data to distinguish autonomous seekers,
       command-guided/datalink, and **laser-designated** (new enum value; also added
       **anti-radiation**, needed for Wild Weasel below). `Data/SeekerControlModel.cs`
@@ -575,23 +614,26 @@ real theatre map.
       radar first).
 - [ ] Placeholder "army loadout" picker. **Not started** — needs a UI/scene.
 
-**Note on scope this pass:** implemented the pure logic/data-layer items that don't
-require a live scene (target types, symmetric engine, stockpile-drain point-defense
-interception via the new `PointDefenseBattery`, AI sequencing, seeker/manual-control
-data model) and verified them all via the same headless `SmokeTest` approach as Phase
-0 (see `AGENTS.md`). Deliberately did **not** attempt the direct-control flight rig,
-radar/ESM/Wild Weasel, or any UI in this pass — those either need a real 3D scene to
-be meaningfully testable (direct control) or are a large enough subsystem (radar/SEAD)
-to warrant their own focused pass rather than being bolted on speculatively. The
-engagement engine and objective model are believed final/stable for these deferred
-items to plug into without rework, per the "no target-type-specific special-casing"
-goal above.
+**Note on scope across this phase's two passes:** the first pass implemented the pure
+logic/data-layer items that don't require a live scene (target types, symmetric
+engine, stockpile-drain point-defense interception via `PointDefenseBattery`, AI
+sequencing, seeker/manual-control data model), verified via headless `SmokeTest` (see
+`AGENTS.md`), and deliberately deferred the direct-control flight rig as needing a
+real 3D scene to be meaningfully testable. A second pass then built that scene by
+reusing/adapting the **pre-pivot project's** flight-control and procedural-visual
+layer (see above) — this pivot's combat-instance logic (stockpile economy, damage/
+hardness soft-cap, win conditions) is what actually runs the resulting playable game,
+not a rebuild of that logic in the old project's style. Radar/ESM/Wild Weasel and the
+theatre-map placeholder loadout picker remain deferred — large enough subsystems to
+warrant their own focused pass rather than being bolted on speculatively.
 
 **Exit criteria:** A player can fight and win/lose attack and defense instances
 against all four target types using only tier 0–1 parts, the stockpile-tactics loop
 (cheap decoys draining expensive defenses) is demonstrably effective/necessary against
 at least one scripted scenario, and the engagement engine has no target-type-specific
-special-casing that would block adding the theatre map later. **Not yet met in full**:
+special-casing that would block adding the theatre map later. **Now partially met
+with a real playable slice** (attacker vs. an undefended Base, in 3D) — **not yet met
+in full**:
 the tactics loop is proven at the logic layer (`PointDefenseBattery`/
 `StandingOrderExecutor`/smoke test) but not yet demonstrated with real spawned units
 in a playable scene.

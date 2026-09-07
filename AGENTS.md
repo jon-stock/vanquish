@@ -84,6 +84,35 @@ Regenerate via `Vanquish.EditorTools.SceneBuilder.BuildPhase2DebugScene`.
 one-component debug-harness scenes for future phases the same way rather than
 duplicating the create/save/exit boilerplate.
 
+### The actual playable game (flyable quadcopter + missiles, not a debug screen)
+
+```
+Assets/_Project/Scenes/Phase1_FlightTest.unity
+Assets/_Project/Scripts/Combat/Play/*
+```
+
+Open that scene and press Play for a real 3D combat instance: WASD to move, Space/
+Shift for altitude, mouse to fire missiles at a physical, destructible "Base" target,
+right-drag to orbit the camera, scroll to zoom. This reuses/adapts the **pre-pivot
+project's** flight-control and procedural-visual layer (see the `pre-pivot-old-plan`
+git tag) — `PlayerDroneController`, `WeaponController`, `MissileBurnController`,
+the chase camera, `RotorSpinner`/`QuadcopterTiltVisual`, and the "no imported art,
+build everything from primitives" convention — ported from the new Input System to
+legacy `UnityEngine.Input` (no package dependency) and rewired from that project's
+old `CombatManager`/`Health` onto this pivot's `EngagementController`/`BaseObjective`/
+`Damageable`, so the exact same stockpile-economy and payload/hardness-soft-cap logic
+proven in `SmokeTest` is what's actually running under the hood — `WeaponController`
+reads/spends ammo directly from the `EngagementController`'s `Stockpile` (one source
+of truth, not a duplicate ammo counter), and `MissileImpact` applies damage via
+`IDamageable.TakeDamage` instead of a flat health value.
+
+Regenerate via `Vanquish.EditorTools.SceneBuilder.BuildPhase1FlightTestScene`.
+`FlightTestHarness.Build()` is also exercised directly (no Play mode needed) by
+`SmokeTest`, including actually firing a shot and checking the stockpile decrements
+and a real missile GameObject gets spawned — this catches wiring mistakes (null refs,
+mismatched part ids) headlessly, though it cannot exercise real player input or
+physics collisions that way.
+
 ## Commit policy
 
 Commit changes to git (and push to `origin`) after each set of changes you make to

@@ -3,9 +3,11 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using Vanquish.Combat;
+using Vanquish.Combat.Play;
 using Vanquish.Data;
 using Vanquish.Data.Support;
 using Vanquish.Simulation.Damage;
+using Vanquish.Simulation.Flight;
 using Vanquish.Theatre;
 
 namespace Vanquish.EditorTools
@@ -51,6 +53,10 @@ namespace Vanquish.EditorTools
             TestEconomicCollapseCondition();
             TestTerritorialControlConditionSustain();
             TestTheatreTurnControllerIntegration();
+
+            // Phase 1 — flight/visual layer
+            TestFlightTestHarnessBuildsAWorkingScene();
+            TestMissileFactorySpawnsAWorkingMissile();
 
             if (_failures > 0)
             {
@@ -597,6 +603,109 @@ namespace Vanquish.EditorTools
             int turnAfterWin = controller.CurrentTurn;
             controller.AdvanceTurn();
             Expect(controller.CurrentTurn == turnAfterWin, "AdvanceTurn should be a no-op once the game has already resolved");
+        }
+
+        private static void TestFlightTestHarnessBuildsAWorkingScene()
+        {
+            var harnessGo = new GameObject("SmokeTest_FlightTestHarness");
+            try
+            {
+                var harness = harnessGo.AddComponent<FlightTestHarness>();
+                harness.Build();
+
+                var objective = UnityEngine.Object.FindFirstObjectByType<BaseObjective>();
+                Expect(objective != null, "FlightTestHarness.Build should create a BaseObjective");
+                Expect(objective != null && Math.Abs(objective.Damageable.MaxHealth - 200f) < 0.001f, "Objective should be configured with 200 max health");
+
+                var controller = UnityEngine.Object.FindFirstObjectByType<EngagementController>();
+                Expect(controller != null, "FlightTestHarness.Build should create an EngagementController");
+                Expect(controller != null && controller.Attacker.RemainingCount("flighttest.missile") == 8, "Attacker stockpile should start with 8 missiles");
+                Expect(controller != null && controller.Objective != null && ReferenceEquals(controller.Objective, objective), "EngagementController's objective should be the same BaseObjective instance");
+
+                var weapon = UnityEngine.Object.FindFirstObjectByType<WeaponController>();
+                Expect(weapon != null, "FlightTestHarness.Build should create a drone with a WeaponController");
+                Expect(weapon != null && weapon.target == objective.transform, "Weapon's target should be the objective");
+                Expect(weapon != null && weapon.CanFire, "Weapon should be able to fire immediately (full ammo, no cooldown)");
+
+                var drone = weapon.GetComponent<FlightBody>();
+                Expect(drone != null, "Player drone should have a FlightBody");
+                Expect(drone != null && !drone.orientToVelocity, "Multirotor drone's FlightBody should have orientToVelocity disabled");
+
+                var playerController = weapon.GetComponent<PlayerDroneController>();
+                Expect(playerController != null, "Player drone should have a PlayerDroneController");
+
+                var camera = UnityEngine.Object.FindFirstObjectByType<Camera>();
+                Expect(camera != null, "FlightTestHarness.Build should create a camera");
+
+                var hud = UnityEngine.Object.FindFirstObjectByType<FlightHUD>();
+                Expect(hud != null, "FlightTestHarness.Build should create a FlightHUD");
+
+                // Actually firing should consume stockpile — exercises the real
+                // WeaponController -> EngagementController -> Stockpile pipeline
+                // end-to-end, same as a mouse click would in Play mode.
+                bool fired = weapon.Fire();
+                Expect(fired, "Weapon.Fire() should succeed with full ammo and a valid target");
+                Expect(controller.Attacker.RemainingCount("flighttest.missile") == 7, "Firing once should consume one missile from the stockpile");
+
+                var spawnedMissile = UnityEngine.Object.FindFirstObjectByType<MissileImpact>();
+                Expect(spawnedMissile != null, "Firing should spawn a missile with a MissileImpact component");
+            }
+            finally
+            {
+                // Clean up everything Build() created, not just the harness object —
+                // named lookup rather than nuking every GameObject in the scene, so
+                // this can't accidentally destroy something unrelated.
+                foreach (string goName in new[]
+                         {
+                             "SmokeTest_FlightTestHarness", "Ground", "Directional Light",
+                             "Objective (Base)", "EngagementController", "Player Drone",
+                             "Main Camera", "HUD", "Missile",
+                         })
+                {
+                    GameObject found = GameObject.Find(goName);
+                    if (found != null)
+                        UnityEngine.Object.DestroyImmediate(found);
+                }
+            }
+        }
+
+        private static void TestMissileFactorySpawnsAWorkingMissile()
+        {
+            var targetGo = new GameObject("SmokeTest_MissileTarget");
+            GameObject missile = null;
+            try
+            {
+                targetGo.transform.position = new Vector3(0f, 0f, 50f);
+
+                missile = MissileFactory.SpawnMissile(Vector3.zero, Quaternion.identity, targetGo.transform, rawDamage: 42f, payloadSize: 17f);
+
+                Expect(missile != null, "SpawnMissile should return a GameObject");
+
+                var flightBody = missile.GetComponent<FlightBody>();
+                Expect(flightBody != null, "Missile should have a FlightBody");
+                Expect(flightBody != null && flightBody.isThrusting, "Missile should start thrusting");
+                Expect(flightBody != null && flightBody.orientToVelocity, "Missile should orient to velocity (not a multirotor)");
+
+                var guidance = missile.GetComponent<Vanquish.Simulation.Guidance.GuidanceController>();
+                Expect(guidance != null && guidance.target == targetGo.transform, "Missile's guidance should target the given transform");
+
+                var burn = missile.GetComponent<MissileBurnController>();
+                Expect(burn != null && burn.flightBody == flightBody, "Missile should have a burn controller wired to its own FlightBody");
+
+                var impact = missile.GetComponent<MissileImpact>();
+                Expect(impact != null, "Missile should have a MissileImpact");
+                Expect(impact != null && Math.Abs(impact.rawDamage - 42f) < 0.001f, "Missile's impact damage should match the requested rawDamage");
+                Expect(impact != null && Math.Abs(impact.payloadSize - 17f) < 0.001f, "Missile's impact payload size should match the requested payloadSize");
+
+                var collider = missile.GetComponent<CapsuleCollider>();
+                Expect(collider != null && collider.direction == 2, "Missile's collider should be Z-oriented (direction=2), matching FlightBody's forward-thrust convention");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(targetGo);
+                if (missile != null)
+                    UnityEngine.Object.DestroyImmediate(missile);
+            }
         }
 
         private static T MakePart<T>(string id) where T : PartDefinition
