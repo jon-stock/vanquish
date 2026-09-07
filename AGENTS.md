@@ -84,6 +84,31 @@ Regenerate via `Vanquish.EditorTools.SceneBuilder.BuildPhase2DebugScene`.
 one-component debug-harness scenes for future phases the same way rather than
 duplicating the create/save/exit boilerplate.
 
+### The actual visible/clickable theatre map (not OnGUI buttons)
+
+```
+Assets/_Project/Scenes/Phase2_TheatreMap.unity
+Assets/_Project/Scripts/Theatre/Play/*
+```
+
+Open that scene and press Play for a real, visible hex-grid theatre map: a 9x7 patch
+of procedurally-meshed hexes (`HexMeshFactory` — no imported art, same convention as
+the drone visuals), colored by terrain (open/road/mountain, mountains rendered
+taller) and by owner (blue Player / red Enemy), with a road cutting across the middle
+and a couple of mountain flanks for terrain variety. Two factories and two bases per
+side are rendered as simple colored markers. WASD pans the camera, scroll zooms,
+left-click selects a hex (shows its terrain/owner/site in the corner panel) — if the
+selected hex is adjacent to Player territory, a "Capture this hex for Player" button
+appears (a simple stand-in for "won a combat instance here" until the real combat-
+instance-to-theatre feedback loop exists). "Advance Turn" ticks site construction/
+production and checks both victory conditions (economic collapse, sustained
+territorial control) live.
+
+Regenerate via `Vanquish.EditorTools.SceneBuilder.BuildPhase2TheatreMapScene`.
+`TheatreMapHarness.Build()` is exercised directly by `SmokeTest` (grid/site counts,
+capture eligibility logic on both a front-line and a deep-territory hex, turn
+production), same headless-first-then-visual pattern as everything else here.
+
 ### The actual playable game (flyable quadcopter + missiles, not a debug screen)
 
 ```

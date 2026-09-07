@@ -5,6 +5,7 @@ using UnityEngine;
 using Vanquish.Combat.DebugTools;
 using Vanquish.Combat.Play;
 using Vanquish.Theatre.DebugTools;
+using Vanquish.Theatre.Play;
 
 namespace Vanquish.EditorTools
 {
@@ -22,6 +23,7 @@ namespace Vanquish.EditorTools
         private const string Phase1ScenePath = "Assets/_Project/Scenes/Phase1_DebugHarness.unity";
         private const string Phase2ScenePath = "Assets/_Project/Scenes/Phase2_TheatreDebugHarness.unity";
         private const string Phase1FlightTestScenePath = "Assets/_Project/Scenes/Phase1_FlightTest.unity";
+        private const string Phase2TheatreMapScenePath = "Assets/_Project/Scenes/Phase2_TheatreMap.unity";
 
         public static void BuildPhase1DebugScene()
         {
@@ -36,6 +38,11 @@ namespace Vanquish.EditorTools
         public static void BuildPhase1FlightTestScene()
         {
             BuildSingleComponentScene<FlightTestHarness>(Phase1FlightTestScenePath, "Phase1 Flight Test Harness");
+        }
+
+        public static void BuildPhase2TheatreMapScene()
+        {
+            BuildSingleComponentScene<TheatreMapHarness>(Phase2TheatreMapScenePath, "Phase2 Theatre Map Harness");
         }
 
         private static void BuildSingleComponentScene<T>(string scenePath, string gameObjectName) where T : Component

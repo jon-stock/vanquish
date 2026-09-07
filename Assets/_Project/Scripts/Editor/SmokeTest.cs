@@ -9,6 +9,7 @@ using Vanquish.Data.Support;
 using Vanquish.Simulation.Damage;
 using Vanquish.Simulation.Flight;
 using Vanquish.Theatre;
+using Vanquish.Theatre.Play;
 
 namespace Vanquish.EditorTools
 {
@@ -57,6 +58,10 @@ namespace Vanquish.EditorTools
             // Phase 1 — flight/visual layer
             TestFlightTestHarnessBuildsAWorkingScene();
             TestMissileFactorySpawnsAWorkingMissile();
+
+            // Phase 2 — visible/clickable theatre map
+            TestHexMeshFactoryAxialToWorldMatchesNeighborSpacing();
+            TestTheatreMapHarnessBuildsAClickableMap();
 
             if (_failures > 0)
             {
@@ -748,6 +753,85 @@ namespace Vanquish.EditorTools
                 UnityEngine.Object.DestroyImmediate(targetGo);
                 if (missile != null)
                     UnityEngine.Object.DestroyImmediate(missile);
+            }
+        }
+
+        private static void TestHexMeshFactoryAxialToWorldMatchesNeighborSpacing()
+        {
+            var center = new HexCoordinate(2, 3);
+            Vector3 centerWorld = HexMeshFactory.AxialToWorld(center, radius: 1f);
+
+            float expectedNeighborDistance = Mathf.Sqrt(3f);
+            foreach (HexCoordinate neighbor in center.Neighbors())
+            {
+                Vector3 neighborWorld = HexMeshFactory.AxialToWorld(neighbor, radius: 1f);
+                float distance = Vector3.Distance(centerWorld, neighborWorld);
+                Expect(Mathf.Abs(distance - expectedNeighborDistance) < 0.001f,
+                    $"Neighbor {neighbor} should be sqrt(3)*radius from center, got {distance}");
+            }
+        }
+
+        private static void TestTheatreMapHarnessBuildsAClickableMap()
+        {
+            var harnessGo = new GameObject("SmokeTest_TheatreMapHarness");
+            try
+            {
+                var harness = harnessGo.AddComponent<TheatreMapHarness>();
+                harness.Build();
+
+                Expect(harness.World.Grid.Tiles.Count == 63, $"Map should be a 9x7 = 63 hex grid, got {harness.World.Grid.Tiles.Count}");
+
+                int playerHexes = harness.World.Grid.CountOwnedBy(TheatreFaction.Player);
+                int enemyHexes = harness.World.Grid.CountOwnedBy(TheatreFaction.Enemy);
+                Expect(playerHexes == 28, $"Player should own 4 of 9 columns * 7 rows = 28 hexes, got {playerHexes}");
+                Expect(enemyHexes == 35, $"Enemy should own 5 of 9 columns * 7 rows = 35 hexes, got {enemyHexes}");
+
+                Expect(harness.World.Sites.Count == 4, $"Should have 4 sites (factory+base per side), got {harness.World.Sites.Count}");
+                Expect(harness.World.Sites.Any(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.Factory && s.IsOperational), "Player factory should exist and be operational");
+                Expect(harness.World.Sites.Any(s => s.Owner == TheatreFaction.Enemy && s.Type == SiteType.Factory && s.IsOperational), "Enemy factory should exist and be operational");
+
+                var camera = harnessGo.GetComponentInChildren<Camera>();
+                Expect(camera != null, "Build should create a camera");
+                var tileViewCount = harnessGo.GetComponentsInChildren<HexTileView>().Length;
+                Expect(tileViewCount == 63, $"Should create one HexTileView per hex, got {tileViewCount}");
+                var siteViewCount = harnessGo.GetComponentsInChildren<SiteMarkerView>().Length;
+                Expect(siteViewCount == 4, $"Should create one SiteMarkerView per site, got {siteViewCount}");
+
+                // A hex on the front line (Enemy-owned, adjacent to a Player hex) should be capturable...
+                HexTile frontHex = harness.World.Grid.Tiles.FirstOrDefault(t =>
+                    t.Owner == TheatreFaction.Enemy && harness.World.Grid.NeighborsOf(t.Coordinate).Any(n => n.Owner == TheatreFaction.Player));
+                Expect(frontHex != null, "There should be at least one Enemy hex adjacent to Player territory (a front line)");
+
+                harness.SelectTile(frontHex);
+                Expect(harness.SelectedTile == frontHex, "SelectTile should set SelectedTile");
+                Expect(harness.CanCaptureSelectedTile(), "A front-line Enemy hex adjacent to Player territory should be capturable");
+
+                bool captured = harness.TryCaptureSelectedTile();
+                Expect(captured, "TryCaptureSelectedTile should succeed on a capturable hex");
+                Expect(frontHex.Owner == TheatreFaction.Player, "Captured hex should now be Player-owned");
+
+                // ...but a hex deep in enemy territory (no Player neighbor) should NOT be.
+                HexTile deepHex = harness.World.Grid.Tiles.FirstOrDefault(t =>
+                    t.Owner == TheatreFaction.Enemy && !harness.World.Grid.NeighborsOf(t.Coordinate).Any(n => n.Owner == TheatreFaction.Player));
+                Expect(deepHex != null, "There should be at least one Enemy hex NOT adjacent to Player territory");
+                harness.SelectTile(deepHex);
+                Expect(!harness.CanCaptureSelectedTile(), "A hex with no adjacent Player territory should not be capturable");
+
+                // Advancing a turn should tick production for both operational factories.
+                int playerResourceBefore = harness.Controller.ResourcePool[TheatreFaction.Player];
+                int enemyResourceBefore = harness.Controller.ResourcePool[TheatreFaction.Enemy];
+                harness.AdvanceTurn();
+                Expect(harness.Controller.CurrentTurn == 1, "AdvanceTurn should increment the turn counter");
+                Expect(harness.Controller.ResourcePool[TheatreFaction.Player] == playerResourceBefore + harness.Controller.ResourcePerOperationalFactoryPerTurn,
+                    "Player's operational factory should have produced resources this turn");
+                Expect(harness.Controller.ResourcePool[TheatreFaction.Enemy] == enemyResourceBefore + harness.Controller.ResourcePerOperationalFactoryPerTurn,
+                    "Enemy's operational factory should have produced resources this turn");
+            }
+            finally
+            {
+                // Everything Build() creates is parented under the harness GameObject,
+                // so destroying it alone is sufficient cleanup.
+                UnityEngine.Object.DestroyImmediate(harnessGo);
             }
         }
 

@@ -686,11 +686,20 @@ all turn-based, feeding into and out of combat instances.
       Operational factories add a flat resource amount to their owner's pool each
       turn — a deliberately simple stand-in for the fuller production/logistics
       simulation below, just enough to make "economic collapse" mean something.
-- [ ] Turn loop with **player actions** (research, recon, choosing where to engage).
-      **Partially done**: `TheatreTurnController.AdvanceTurn()` is the turn-resolution
-      engine (ticks sites, runs production, evaluates victory), proven interactively
-      in the new debug harness. **Not done**: there's no actual player-action menu —
-      that's a UI concern, deferred with the rest of the UI work below.
+- [~] Turn loop with **player actions** (research, recon, choosing where to engage).
+      `TheatreTurnController.AdvanceTurn()` is the turn-resolution engine (ticks
+      sites, runs production, evaluates victory). Beyond the OnGUI-button debug
+      harness, there is now an actual **visible, clickable hex-grid map**
+      (`Assets/_Project/Scenes/Phase2_TheatreMap.unity` /
+      `Assets/_Project/Scripts/Theatre/Play/*`) — a real 9x7 procedurally-meshed hex
+      patch (`HexMeshFactory`, no imported art) colored by terrain/owner, with two
+      factories and two bases rendered as markers, a pannable/zoomable camera, and
+      click-to-select-a-hex with a "Capture this hex for Player" action (a stand-in
+      for "won a combat instance here" — see the feedback-loop item below) alongside
+      Advance Turn. **Not yet done**: research, recon/scouting, and actually
+      *choosing to trigger a combat instance* from a selected hex (capture is an
+      instant stand-in, not a real engagement); a proper player-action menu beyond
+      the one capture action.
 - [ ] Theatre-level tactics/taskings (survey/FPV-standby/hold-in-reserve orders).
       **Deferred** — meaningfully needs the surveillance/intel system below first
       (an order like "survey this region" is meaningless without fog-of-war to lift).
@@ -714,15 +723,19 @@ all turn-based, feeding into and out of combat instances.
       `ApplyDamage`/`Destroyed` state is the ready-made hook for "base destroyed kills
       its operators" once personnel exists.
 
-**Note on scope this pass:** same approach as Phases 0/1 — built the pure logic/data
-foundations (hex grid, sites, movement, turn resolution, victory conditions) and
-proved them via the same headless `SmokeTest`, then added an interactive
-`TheatreDebugHarness` (see `AGENTS.md`) so the turn loop, production tick, and both
-victory conditions can actually be clicked through and watched resolve. Did **not**
-attempt intel/fog-of-war, theatre radar, full logistics, the combat↔theatre feedback
-loop, personnel, or any UI — each is either a substantial system best tackled in its
-own focused pass, or blocked on one of the others (radar needs intel; taskings need
-radar/intel; personnel needs a UI to be worth building). `Site.ApplyDamage` is a
+**Note on scope across this phase's passes:** same approach as Phases 0/1 — built the
+pure logic/data foundations (hex grid, sites, movement, turn resolution, victory
+conditions) and proved them via the same headless `SmokeTest`, then added an
+interactive `TheatreDebugHarness` (OnGUI-only) so the turn loop, production tick, and
+both victory conditions could be clicked through. A follow-up pass then built the
+actual **visible, clickable hex-grid map** (`Phase2_TheatreMap.unity`) requested
+directly — real hex tiles you can see and click, not just buttons — reusing the exact
+same `HexGrid`/`Site`/`TheatreTurnController` logic underneath. Did **not** attempt
+intel/fog-of-war, theatre radar, full logistics, the combat↔theatre feedback loop,
+personnel, or a full player-action turn menu beyond the one "capture hex" action —
+each is either a substantial system best tackled in its own focused pass, or blocked
+on one of the others (radar needs intel; taskings need radar/intel; personnel needs a
+UI to be worth building, which now exists in basic form). `Site.ApplyDamage` is a
 deliberately-placed hook so the feedback loop and personnel/base-destruction can be
 wired on top of what exists here without rework.
 
@@ -733,9 +746,11 @@ fast each side can reinforce them, using tier 0–1 content throughout, includin
 least one hired operator who can gain rank and can be killed if their base falls, and
 at least one strategic victory condition (economic collapse or territorial control)
 able to end the game. **Not yet met in full**: the hex grid/movement/site-lifecycle/
-victory-condition core is built and interactively provable (`TheatreDebugHarness`),
-but "scout," a real player-action turn menu, and personnel/base-destruction stakes are
-not yet implemented — this phase's foundational data model is believed stable for
+victory-condition core is built and now genuinely visible/clickable
+(`Phase2_TheatreMap.unity`, with a working "capture hex" interaction and both victory
+conditions triggerable live), but "scout," a real multi-action player turn menu, and
+personnel/base-destruction stakes are not yet implemented — this phase's foundational
+data model is believed stable for
 those to build on without rework.
 
 ---
