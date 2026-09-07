@@ -152,6 +152,11 @@ namespace Vanquish.Combat.Play
 
             var rigidbody = drone.AddComponent<Rigidbody>();
             rigidbody.linearDamping = 0f;
+            // No yaw/roll/pitch control exists for multirotors yet (orientToVelocity
+            // is disabled and nothing else drives rotation) — freeze it so a physics
+            // bump (e.g. two units drifting into each other) can't leave a drone
+            // tumbling indefinitely with nothing to right it.
+            rigidbody.constraints = RigidbodyConstraints.FreezeRotation;
 
             var collider = drone.AddComponent<BoxCollider>();
             collider.size = new Vector3(1f, 0.5f, 1f);

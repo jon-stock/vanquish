@@ -114,9 +114,14 @@ mismatched part ids) headlessly, though it cannot exercise real player input or
 physics collisions that way.
 
 The drone visual (body/arms/spinning rotors/mounted-missile props that visually
-deplete per shot — `DroneVisualBuilder`/`MountedMissileVisuals`) is built to more
-closely match the pre-pivot project's multirotor silhouette (plus a nose canopy/
-sensor pod and landing legs for a less "plain box" look).
+deplete per shot — `DroneVisualBuilder`/`MountedMissileVisuals`) is styled after a
+real FPV/racing quad rather than one painted box: a dark carbon-fiber-look frame
+plate, a raised flight-controller/battery stack, a battery pack slung underneath, a
+low forward FPV camera, twin-blade props, and landing legs — with each unit's
+identifying color used only as small accents (stack trim, arm tips) rather than one
+flat saturated hull color, matching how real hardware actually looks. Drone
+Rigidbodies also freeze rotation now (no yaw/roll/pitch control exists yet, so a
+physics bump has nothing to right itself with otherwise).
 
 The scene now has **two independently-controllable units** — a quadcopter and a
 hexacopter (`Vanquish.Combat.Play.DroneRotorConfiguration`: same visual builder, just
