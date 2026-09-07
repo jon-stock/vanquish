@@ -55,6 +55,20 @@ namespace Vanquish.Data
         SemiActiveRadar,
         ActiveRadar,
         WireOrDatalinkGuided,
+
+        /// <summary>
+        /// Requires an active designator (player, ally, or scout) painting the
+        /// target for terminal guidance (PLAN.md Command &amp; Control Model). Distinct
+        /// from SemiActiveRadar (illuminated by radar, not a laser) even though both
+        /// require a third party actively marking the target.
+        /// </summary>
+        LaserDesignated,
+
+        /// <summary>
+        /// Anti-radiation seeker — homes on an active radar's own emissions rather
+        /// than RCS/IR (PLAN.md "Radar &amp; SEAD" / Wild Weasel tactic).
+        /// </summary>
+        AntiRadiation,
     }
 
     public enum PropulsionType

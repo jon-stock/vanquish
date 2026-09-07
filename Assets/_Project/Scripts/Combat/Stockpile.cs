@@ -32,6 +32,10 @@ namespace Vanquish.Combat
 
         public bool CanCommit(string partId) => RemainingCount(partId) > 0;
 
+        /// <summary>Look up an entry's data (e.g. rawDamage/payloadSize) by part id. Null if unknown.</summary>
+        public StockpileEntry GetEntry(string partId) =>
+            _entriesByPartId.TryGetValue(partId, out StockpileEntry entry) ? entry : null;
+
         /// <summary>
         /// Commit one unit of the given part id, decrementing its remaining count.
         /// Returns false (and commits nothing) if that part type is depleted or unknown.

@@ -10,23 +10,55 @@ namespace Vanquish.Combat
         DefenderWin,
     }
 
+    /// <summary>Result of a single attacker strike attempt against the objective, via <see cref="EngagementController.CommitAttackerStrike"/>.</summary>
+    public enum AttackerStrikeResult
+    {
+        /// <summary>That part type's stockpile was already empty — nothing was spent, nothing happened.</summary>
+        Depleted,
+
+        /// <summary>The unit was committed and spent, but a point-defense battery intercepted it before it landed.</summary>
+        Intercepted,
+
+        /// <summary>The unit was committed, got through, and landed its damage on the objective.</summary>
+        Hit,
+    }
+
     /// <summary>
-    /// Phase 0 "engagement setup" flow: wires a hardcoded attacker/defender loadout
-    /// (PLAN.md — no theatre map yet, this is the placeholder) against one target
-    /// type (a <see cref="BaseObjective"/>), tracks the finite stockpile economy, and
-    /// resolves the win/lose result. Attack/defense are meant to become fully
-    /// symmetric in Phase 1; this controller has no target-type-specific
-    /// special-casing beyond referencing a single objective, so it should generalize
-    /// to other target types without rework.
+    /// The "engagement setup" flow (PLAN.md Phase 0/1): wires a hardcoded
+    /// attacker/defender loadout (no theatre map yet — this is the placeholder)
+    /// against one <see cref="IObjective"/>, tracks the finite stockpile economy on
+    /// both sides (including defending point-defense batteries), and resolves the
+    /// win/lose result. Deliberately has no target-type-specific special-casing:
+    /// it only ever talks to <see cref="IObjective"/>, so base/factory/warehouse/
+    /// supply-line all plug in unchanged, and attack/defense are symmetric — nothing
+    /// here assumes which side the player is on.
     /// </summary>
     public class EngagementController : MonoBehaviour
     {
         [Header("Objective")]
-        public BaseObjective objective;
+        [SerializeField] private MonoBehaviour objectiveBehaviour;
+
+        /// <summary>
+        /// The active objective. Exposed as <see cref="IObjective"/> per the "no
+        /// target-type-specific special-casing" rule above. Backed by a
+        /// <see cref="MonoBehaviour"/> field for Inspector assignment (Unity cannot
+        /// serialize a plain interface reference); assign any component that
+        /// implements <see cref="IObjective"/> (BaseObjective, FactoryObjective,
+        /// WarehouseObjective, SupplyLineObjective, ...).
+        /// </summary>
+        public IObjective Objective
+        {
+            get => objectiveBehaviour as IObjective;
+            set => objectiveBehaviour = value as MonoBehaviour;
+        }
 
         [Header("Loadout (Phase 0 placeholder for the theatre map)")]
         public StockpileEntry[] attackerLoadout;
         public StockpileEntry[] defenderLoadout;
+
+        [Header("Defenses")]
+        [Tooltip("Point-defense batteries that get a chance to intercept each attacker strike (PLAN.md stockpile-drain tactic).")]
+        public PointDefenseBattery[] defenderBatteries;
 
         [Header("Timing")]
         [Tooltip("Defender wins by outlasting the attacker's stockpile/patience if this elapses first.")]
@@ -77,6 +109,7 @@ namespace Vanquish.Combat
                 return;
 
             ElapsedSeconds += deltaTime;
+            Objective?.Tick(deltaTime);
             EvaluateWinConditions();
         }
 
@@ -91,8 +124,37 @@ namespace Vanquish.Combat
         /// <summary>Same as <see cref="TryCommitAttackerUnit"/> but for the defending side's interceptors/point defense.</summary>
         public bool TryCommitDefenderUnit(string partId) => Defender.TryCommit(partId);
 
+        /// <summary>
+        /// The full attacker-strike pipeline (PLAN.md Phase 1): commit one unit of
+        /// stockpile, give every defending <see cref="PointDefenseBattery"/> a chance
+        /// to intercept it (each attempt costs a battery one interceptor regardless
+        /// of outcome — this is what makes cheap decoys able to drain expensive
+        /// defenses), and if nothing intercepts it, apply its damage to the
+        /// objective via the payload/hardness soft-cap model.
+        /// </summary>
+        public AttackerStrikeResult CommitAttackerStrike(string partId)
+        {
+            StockpileEntry entry = Attacker.GetEntry(partId);
+            if (entry == null || !Attacker.TryCommit(partId))
+                return AttackerStrikeResult.Depleted;
+
+            if (defenderBatteries != null)
+            {
+                foreach (PointDefenseBattery battery in defenderBatteries)
+                {
+                    if (battery != null && battery.TryIntercept())
+                        return AttackerStrikeResult.Intercepted;
+                }
+            }
+
+            Objective?.Damageable?.TakeDamage(entry.rawDamage, entry.payloadSize);
+            return AttackerStrikeResult.Hit;
+        }
+
         private void EvaluateWinConditions()
         {
+            IObjective objective = Objective;
+
             if (objective != null && objective.HasMetAttackerWinCondition)
             {
                 Resolve(EngagementResult.AttackerWin);
@@ -101,8 +163,9 @@ namespace Vanquish.Combat
 
             bool attackerOutOfStock = Attacker.IsFullyDepleted();
             bool timeUp = ElapsedSeconds >= timeLimitSeconds;
+            bool defenderObjectiveWin = objective != null && objective.HasMetDefenderWinCondition;
 
-            if (attackerOutOfStock || timeUp)
+            if (attackerOutOfStock || timeUp || defenderObjectiveWin)
             {
                 Resolve(EngagementResult.DefenderWin);
             }

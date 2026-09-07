@@ -33,6 +33,15 @@ namespace Vanquish.EditorTools
             TestEngagementControllerResolvesAttackerWin();
             TestEngagementControllerResolvesDefenderWinOnDepletion();
 
+            // Phase 1
+            TestFactoryAndWarehouseObjectivesShareStructureLogic();
+            TestSupplyLineObjectiveDefenderWinViaEscort();
+            TestSupplyLineObjectiveAttackerWinViaDestruction();
+            TestPointDefenseBatteryConsumesAmmoRegardlessOfOutcome();
+            TestEngagementControllerCommitAttackerStrikePipeline();
+            TestStandingOrderExecutorSequencesDecoysFirst();
+            TestSeekerControlModel();
+
             if (_failures > 0)
             {
                 Debug.LogError($"[SmokeTest] FAILED — {_failures} assertion(s) failed.");
@@ -151,7 +160,7 @@ namespace Vanquish.EditorTools
                 objective.Damageable.Configure(100f, 0f);
 
                 var controller = controllerGo.AddComponent<EngagementController>();
-                controller.objective = objective;
+                controller.Objective = objective;
                 controller.attackerLoadout = new[] { new StockpileEntry { part = drone, startingCount = 5 } };
                 controller.defenderLoadout = new StockpileEntry[0];
                 controller.timeLimitSeconds = 180f;
@@ -184,7 +193,7 @@ namespace Vanquish.EditorTools
                 objective.Damageable.Configure(100f, 0f);
 
                 var controller = controllerGo.AddComponent<EngagementController>();
-                controller.objective = objective;
+                controller.Objective = objective;
                 controller.attackerLoadout = new[] { new StockpileEntry { part = drone, startingCount = 1 } };
                 controller.defenderLoadout = new StockpileEntry[0];
                 controller.timeLimitSeconds = 180f;
@@ -205,6 +214,225 @@ namespace Vanquish.EditorTools
                 UnityEngine.Object.DestroyImmediate(controllerGo);
                 UnityEngine.Object.DestroyImmediate(drone);
             }
+        }
+
+        private static void TestFactoryAndWarehouseObjectivesShareStructureLogic()
+        {
+            var factoryGo = new GameObject("SmokeTest_Factory");
+            var warehouseGo = new GameObject("SmokeTest_Warehouse");
+            try
+            {
+                var factory = factoryGo.AddComponent<FactoryObjective>();
+                factory.attackerWinDestroyedFraction = 0.75f;
+                factory.Damageable.Configure(200f, 40f); // harder than a base
+
+                var warehouse = warehouseGo.AddComponent<WarehouseObjective>();
+                warehouse.attackerWinDestroyedFraction = 0.75f;
+                warehouse.Damageable.Configure(80f, 5f); // softer than a base
+
+                Expect(!factory.HasMetAttackerWinCondition, "Fresh factory should not be won yet");
+                Expect(!warehouse.HasMetAttackerWinCondition, "Fresh warehouse should not be won yet");
+                Expect(!factory.HasMetDefenderWinCondition, "Structure objectives never have their own defender-win condition");
+
+                // Same win-condition math as BaseObjective, proving the shared base class works identically.
+                factory.Damageable.TakeDamage(160f, 100f); // payload exceeds hardness -> uncapped
+                Expect(factory.HasMetAttackerWinCondition, $"Factory should be won at 80% destroyed, got {factory.DestroyedFraction01:P0}");
+
+                warehouse.Damageable.TakeDamage(65f, 100f);
+                Expect(warehouse.HasMetAttackerWinCondition, $"Warehouse should be won at >=75% destroyed, got {warehouse.DestroyedFraction01:P0}");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(factoryGo);
+                UnityEngine.Object.DestroyImmediate(warehouseGo);
+            }
+        }
+
+        private static void TestSupplyLineObjectiveDefenderWinViaEscort()
+        {
+            var go = new GameObject("SmokeTest_SupplyLine_Escort");
+            try
+            {
+                var supplyLine = go.AddComponent<SupplyLineObjective>();
+                supplyLine.attackerWinDestroyedFraction = 0.6f;
+                supplyLine.escortProgressPerSecond = 0.5f;
+                supplyLine.Damageable.Configure(100f, 0f);
+
+                Expect(!supplyLine.HasMetDefenderWinCondition, "Fresh convoy should not have reached safety yet");
+
+                supplyLine.Tick(1f); // 0.5 progress
+                Expect(!supplyLine.HasMetDefenderWinCondition, "Convoy should not be at safety after 1 of 2 seconds");
+
+                supplyLine.Tick(1f); // 1.0 progress
+                Expect(supplyLine.HasMetDefenderWinCondition, "Convoy should reach safety (defender win) after enough escort time");
+                Expect(!supplyLine.HasMetAttackerWinCondition, "Undamaged convoy should never satisfy the attacker win condition");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        private static void TestSupplyLineObjectiveAttackerWinViaDestruction()
+        {
+            var go = new GameObject("SmokeTest_SupplyLine_Destroyed");
+            try
+            {
+                var supplyLine = go.AddComponent<SupplyLineObjective>();
+                supplyLine.attackerWinDestroyedFraction = 0.6f;
+                supplyLine.escortProgressPerSecond = 0.01f; // slow, so destruction wins the race
+                supplyLine.Damageable.Configure(100f, 0f);
+
+                supplyLine.Damageable.TakeDamage(70f, 0f);
+                supplyLine.Tick(1f);
+
+                Expect(supplyLine.HasMetAttackerWinCondition, "Convoy destroyed past threshold should satisfy attacker win");
+                Expect(!supplyLine.HasMetDefenderWinCondition, "Barely-escorted, mostly-destroyed convoy should not also claim defender win");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        private static void TestPointDefenseBatteryConsumesAmmoRegardlessOfOutcome()
+        {
+            var alwaysHitGo = new GameObject("SmokeTest_PointDefenseBattery_AlwaysHit");
+            var alwaysMissGo = new GameObject("SmokeTest_PointDefenseBattery_AlwaysMiss");
+            PointDefenseDefinition alwaysHitDef = ScriptableObject.CreateInstance<PointDefenseDefinition>();
+            PointDefenseDefinition alwaysMissDef = ScriptableObject.CreateInstance<PointDefenseDefinition>();
+            try
+            {
+                alwaysHitDef.id = "smoketest.pd.always-hit";
+                alwaysHitDef.ammoCount = 2;
+                alwaysHitDef.interceptProbability = 1f; // always intercepts, if it has ammo
+
+                var alwaysHitBattery = alwaysHitGo.AddComponent<PointDefenseBattery>();
+                alwaysHitBattery.Configure(alwaysHitDef);
+
+                Expect(alwaysHitBattery.RemainingAmmo == 2, "Should start with 2 interceptors");
+                Expect(alwaysHitBattery.TryIntercept(), "First intercept should succeed (100% chance)");
+                Expect(alwaysHitBattery.RemainingAmmo == 1, "One interceptor should have been spent");
+                Expect(alwaysHitBattery.TryIntercept(), "Second intercept should succeed");
+                Expect(alwaysHitBattery.RemainingAmmo == 0, "Battery should now be out of ammo");
+                Expect(!alwaysHitBattery.TryIntercept(), "Depleted battery cannot intercept a third time, even at 100% probability");
+
+                // A battery that always MISSES should still spend ammo — this is the
+                // core stockpile-drain mechanic: a decoy still costs the defender a shot.
+                alwaysMissDef.id = "smoketest.pd.always-miss";
+                alwaysMissDef.ammoCount = 1;
+                alwaysMissDef.interceptProbability = 0f;
+
+                var alwaysMissBattery = alwaysMissGo.AddComponent<PointDefenseBattery>();
+                alwaysMissBattery.Configure(alwaysMissDef);
+
+                bool intercepted = alwaysMissBattery.TryIntercept();
+                Expect(!intercepted, "0% probability battery should never actually intercept");
+                Expect(alwaysMissBattery.RemainingAmmo == 0, "Ammo should still be spent on a missed shot at a decoy");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(alwaysHitGo);
+                UnityEngine.Object.DestroyImmediate(alwaysMissGo);
+                UnityEngine.Object.DestroyImmediate(alwaysHitDef);
+                UnityEngine.Object.DestroyImmediate(alwaysMissDef);
+            }
+        }
+
+        private static void TestEngagementControllerCommitAttackerStrikePipeline()
+        {
+            var objectiveGo = new GameObject("SmokeTest_Objective_StrikePipeline");
+            var controllerGo = new GameObject("SmokeTest_Controller_StrikePipeline");
+            var batteryGo = new GameObject("SmokeTest_Battery_StrikePipeline");
+            PointDefenseDefinition drone = MakePart<PointDefenseDefinition>("smoketest.strike.drone");
+            PointDefenseDefinition alwaysMissBattery = ScriptableObject.CreateInstance<PointDefenseDefinition>();
+            try
+            {
+                var objective = objectiveGo.AddComponent<BaseObjective>();
+                objective.Damageable.Configure(100f, 0f);
+
+                alwaysMissBattery.id = "smoketest.pd.pipeline";
+                alwaysMissBattery.ammoCount = 1;
+                alwaysMissBattery.interceptProbability = 0f; // never intercepts — first strike should land
+
+                var battery = batteryGo.AddComponent<PointDefenseBattery>();
+                battery.Configure(alwaysMissBattery);
+
+                var controller = controllerGo.AddComponent<EngagementController>();
+                controller.Objective = objective;
+                controller.attackerLoadout = new[]
+                {
+                    new StockpileEntry { part = drone, startingCount = 2, rawDamage = 30f, payloadSize = 0f },
+                };
+                controller.defenderLoadout = new StockpileEntry[0];
+                controller.defenderBatteries = new[] { battery };
+                controller.Initialize();
+
+                AttackerStrikeResult first = controller.CommitAttackerStrike("smoketest.strike.drone");
+                Expect(first == AttackerStrikeResult.Hit, $"First strike should get through (battery never intercepts) and hit, got {first}");
+                Expect(Math.Abs(objective.Damageable.CurrentHealth - 70f) < 0.001f, $"Objective should take 30 damage, got {objective.Damageable.CurrentHealth}");
+
+                AttackerStrikeResult second = controller.CommitAttackerStrike("smoketest.strike.drone");
+                Expect(second == AttackerStrikeResult.Hit, $"Second strike should also hit (only depleted, not intercepted, was tested here)");
+
+                AttackerStrikeResult third = controller.CommitAttackerStrike("smoketest.strike.drone");
+                Expect(third == AttackerStrikeResult.Depleted, $"Third strike should fail — only 2 in stock, got {third}");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(objectiveGo);
+                UnityEngine.Object.DestroyImmediate(controllerGo);
+                UnityEngine.Object.DestroyImmediate(batteryGo);
+                UnityEngine.Object.DestroyImmediate(drone);
+                UnityEngine.Object.DestroyImmediate(alwaysMissBattery);
+            }
+        }
+
+        private static void TestStandingOrderExecutorSequencesDecoysFirst()
+        {
+            var executor = new StandingOrderExecutor
+            {
+                Order = StandingOrder.AttackNow,
+                CommitIntervalSeconds = 1f,
+                CommitPriorityPartIds = new[] { "decoy", "strike" },
+            };
+
+            var stockpile = new System.Collections.Generic.Dictionary<string, int> { { "decoy", 2 }, { "strike", 1 } };
+            bool TryCommit(string id)
+            {
+                if (stockpile.TryGetValue(id, out int count) && count > 0)
+                {
+                    stockpile[id] = count - 1;
+                    return true;
+                }
+                return false;
+            }
+
+            // Sub-interval tick should not commit anything yet.
+            executor.Tick(0.5f, TryCommit);
+            Expect(stockpile["decoy"] == 2, "Should not commit before the interval elapses");
+
+            executor.Tick(0.5f, TryCommit); // total 1.0s -> first commit
+            Expect(stockpile["decoy"] == 1, "First interval should commit a decoy (priority order)");
+
+            executor.Tick(1f, TryCommit); // second decoy
+            Expect(stockpile["decoy"] == 0, "Second interval should commit the last decoy");
+
+            executor.Tick(1f, TryCommit); // decoys depleted -> should fall through to strike
+            Expect(stockpile["strike"] == 0, "Once decoys are depleted, the executor should advance to the strike priority");
+        }
+
+        private static void TestSeekerControlModel()
+        {
+            Expect(SeekerControlModel.IsManuallyFlyable(SeekerType.WireOrDatalinkGuided), "Command-guided/datalink munitions should be manually flyable");
+            Expect(!SeekerControlModel.IsManuallyFlyable(SeekerType.ActiveRadar), "Autonomous active-radar seekers should not be manually flyable");
+            Expect(!SeekerControlModel.IsManuallyFlyable(SeekerType.Infrared), "Autonomous IR seekers should not be manually flyable");
+            Expect(!SeekerControlModel.IsManuallyFlyable(SeekerType.LaserDesignated), "Laser-designated munitions are guided by a designator, not flown by the player");
+            Expect(!SeekerControlModel.IsManuallyFlyable(SeekerType.AntiRadiation), "Anti-radiation seekers are autonomous once locked");
+
+            Expect(SeekerControlModel.RequiresActiveDesignation(SeekerType.LaserDesignated), "Laser-designated munitions require an active designator");
+            Expect(SeekerControlModel.RequiresActiveDesignation(SeekerType.SemiActiveRadar), "Semi-active radar munitions require illumination");
+            Expect(!SeekerControlModel.RequiresActiveDesignation(SeekerType.ActiveRadar), "Active radar seekers illuminate their own target");
         }
 
         private static T MakePart<T>(string id) where T : PartDefinition

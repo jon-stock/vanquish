@@ -524,60 +524,77 @@ result.
 **Goal:** Prove out the full tactical layer described in the pivot, still without a
 real theatre map.
 
-- [ ] Implement the remaining three target types: **supply line** (moving objective),
+- [x] Implement the remaining three target types: **supply line** (moving objective),
       **factory**, **warehouse** — each with its own defense profile and win-condition
-      rules.
-- [ ] Make attack/defense fully symmetric: any target type can be run with the player
-      on either side, using the same engagement engine, only the spawn/role setup
-      differs.
-- [ ] Basic opposing-side AI: when the player is attacker, an AI defender allocates
-      point-defense fire; when the player is defender, an AI attacker sequences a
-      strike package (including using cheap units as decoys — this is the tactical
-      thesis of the pivot and should be visible in the *enemy's* behavior too, not
-      just available to the player).
-- [ ] Surface the stockpile economy in the UI clearly: show unit cost, remaining
-      stock per type, and (ideally) an indicator of what the defender just expended
-      responding to an attacker's decoy — the player needs to *feel* the trade-off to
-      make good decisions.
-- [ ] Expand the battlefield-tactics layer: richer standing orders (target priority by
-      type, engagement range/altitude rules for point defense).
-- [ ] Build the **direct control** layer: a third-person manual flight control rig the
-      player can drop into for any single committed drone (reusing/extending
-      `FlightBody` for player input instead of `IGuidanceLaw`), and back out of to
-      resume standing orders/battlefield tactics for that unit.
-- [ ] Extend `SeekerType`/guidance data to distinguish **autonomous seekers**
-      (heat-seek, active/semi-active radar — no manual control), **command-guided /
-      datalink** (manually flyable by the player while the link holds, same control
-      rig as a drone), and **laser-designated** (requires an active designator —
-      player, ally, or scout — painting the target rather than flying the weapon).
-      Wire manual-control eligibility to this field rather than a separate flag.
-- [ ] Extend the payload/hardness model to the remaining target types (supply line,
-      factory, warehouse) so each has its own hardness rating and cap behavior — e.g.
-      a factory should be at least as hardened as a base, a warehouse and supply line
-      likely softer.
-- [ ] Add **battlefield radar** as an embedded defensive asset on defended target
-      types (`RadarInstallationDefinition`, scoped Battlefield): while alive it
-      extends the defender's detection range/lock quality; add it as a destroyable
-      sub-objective within the instance so attackers can choose to prioritize SEAD
-      before the main strike.
-- [ ] Add an **emissions-detection (ESM/RWR) channel**, separate from the existing
-      RCS-based `DetectionSensor`: wire up `SensorSuiteDefinition`'s existing ESM/RWR
-      fields so an equipped unit can detect an *actively emitting* radar that would
-      otherwise be invisible; a passive/off radar stays hidden.
-- [ ] Add an **anti-radiation `SeekerType`** (homes on active radar emissions) and a
-      **Wild Weasel** drone role/tasking that provokes a radar into emitting (so it
-      becomes findable via the ESM channel above) for a follow-up strike — see
-      [Radar & SEAD](#radar--sead).
-- [ ] Placeholder "army loadout" picker stands in for the theatre map: a simple
-      pre-battle screen where the player picks what stockpile they're bringing to a
-      canned scenario, per target type, respecting the range/endurance bottleneck rule
-      from Phase 0.
+      rules. `FactoryObjective`/`WarehouseObjective` share a common
+      `StructureObjectiveBase` with `BaseObjective` (mechanically identical —
+      destroy N% of health — differing only by authored hardness/health/threshold
+      data, per the plan's own framing). `SupplyLineObjective` is genuinely distinct:
+      it has its own defender-win condition (escort progress reaching safety) rather
+      than relying solely on the generic stockpile/timeout path.
+- [x] Make attack/defense fully symmetric: introduced an `IObjective` interface
+      (`Tick`, `HasMetAttackerWinCondition`, `HasMetDefenderWinCondition`,
+      `Damageable`) so `EngagementController` only ever talks to that abstraction —
+      it has zero target-type-specific code branches. `CommitAttackerStrike` (the
+      full commit→intercept→damage pipeline) is likewise role-agnostic; nothing
+      about it assumes which side the human is playing.
+- [~] Basic opposing-side AI: `StandingOrderExecutor` implements the **sequencing**
+      half of this (given an ordered commit-priority list, it keeps committing the
+      current priority entry — e.g. decoys — until depleted, then advances to the
+      next, at a fixed interval), proven in the smoke test. **Not yet done**: an
+      actual defender-side point-defense *targeting policy* AI (which battery
+      engages which incoming type, at what range) and a full scripted-scenario
+      opponent — these need real spawned units in a scene to mean anything (see
+      note below).
+- [ ] Surface the stockpile economy in the UI clearly. **Not started** — there is no
+      UI at all yet; needs a real scene (see note below).
+- [x] Expand the battlefield-tactics layer: `StandingOrderExecutor` adds ordered
+      commit-priority sequencing on top of Phase 0's bare `AttackNow`/`Hold`. Richer
+      rules (engagement range/altitude for point defense) are deferred until there
+      are real flying units with positions to reason about.
+- [ ] Build the **direct control** layer (third-person manual flight control rig).
+      **Deliberately deferred** — this fundamentally needs a camera, input, and a
+      scene to be anything other than inert code; not worth building blind. Priority
+      for the first pass once a scene/prefabs exist.
+- [x] Extend `SeekerType`/guidance data to distinguish autonomous seekers,
+      command-guided/datalink, and **laser-designated** (new enum value; also added
+      **anti-radiation**, needed for Wild Weasel below). `Data/SeekerControlModel.cs`
+      is the single source of truth: `IsManuallyFlyable` (true only for
+      `WireOrDatalinkGuided`) and `RequiresActiveDesignation` (`SemiActiveRadar`,
+      `LaserDesignated`) — no separate flag needed, exactly as planned.
+- [x] Extend the payload/hardness model to the remaining target types: since hardness
+      lives on `Damageable` (data, not code), `FactoryObjective`/`WarehouseObjective`/
+      `SupplyLineObjective` all get their own hardness/health/threshold for free via
+      `StructureObjectiveBase`/`SupplyLineObjective`'s shared use of `Damageable`.
+- [ ] Add **battlefield radar** as an embedded defensive asset. **Deferred** — see
+      note below on why radar/SEAD wasn't tackled this pass.
+- [ ] Add an **emissions-detection (ESM/RWR) channel**. **Deferred**, same reason.
+- [ ] Add a **Wild Weasel** drone role/tasking. **Deferred**, same reason (the
+      anti-radiation `SeekerType` value and `SeekerControlModel` groundwork above are
+      done; the actual provoke/expose behavior needs the ESM channel and battlefield
+      radar first).
+- [ ] Placeholder "army loadout" picker. **Not started** — needs a UI/scene.
+
+**Note on scope this pass:** implemented the pure logic/data-layer items that don't
+require a live scene (target types, symmetric engine, stockpile-drain point-defense
+interception via the new `PointDefenseBattery`, AI sequencing, seeker/manual-control
+data model) and verified them all via the same headless `SmokeTest` approach as Phase
+0 (see `AGENTS.md`). Deliberately did **not** attempt the direct-control flight rig,
+radar/ESM/Wild Weasel, or any UI in this pass — those either need a real 3D scene to
+be meaningfully testable (direct control) or are a large enough subsystem (radar/SEAD)
+to warrant their own focused pass rather than being bolted on speculatively. The
+engagement engine and objective model are believed final/stable for these deferred
+items to plug into without rework, per the "no target-type-specific special-casing"
+goal above.
 
 **Exit criteria:** A player can fight and win/lose attack and defense instances
 against all four target types using only tier 0–1 parts, the stockpile-tactics loop
 (cheap decoys draining expensive defenses) is demonstrably effective/necessary against
 at least one scripted scenario, and the engagement engine has no target-type-specific
-special-casing that would block adding the theatre map later.
+special-casing that would block adding the theatre map later. **Not yet met in full**:
+the tactics loop is proven at the logic layer (`PointDefenseBattery`/
+`StandingOrderExecutor`/smoke test) but not yet demonstrated with real spawned units
+in a playable scene.
 
 ---
 
