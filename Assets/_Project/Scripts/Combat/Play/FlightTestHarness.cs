@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Vanquish.Combat;
 using Vanquish.Data;
@@ -23,6 +24,10 @@ namespace Vanquish.Combat.Play
     public class FlightTestHarness : MonoBehaviour
     {
         private const string MissilePartId = "flighttest.missile";
+        private const int StartingMissileCount = 4;
+
+        [Tooltip("Quadcopter is the Phase 1 focus; hexacopter is kept available for whenever a heavier-lift/higher-tier design is needed.")]
+        public DroneRotorConfiguration rotorConfiguration = DroneRotorConfiguration.Quadcopter;
 
         private void Start()
         {
@@ -42,7 +47,7 @@ namespace Vanquish.Combat.Play
 
             BaseObjective objective = BuildObjective();
             EngagementController engagementController = BuildEngagementController(objective);
-            GameObject drone = BuildPlayerDrone(engagementController);
+            GameObject drone = BuildPlayerDrone(engagementController, rotorConfiguration);
             BuildCamera(drone.transform, objective.transform);
             BuildHud(engagementController, drone, objective);
         }
@@ -93,7 +98,7 @@ namespace Vanquish.Combat.Play
             controller.Objective = objective;
             controller.attackerLoadout = new[]
             {
-                new StockpileEntry { part = missilePart, startingCount = 8, rawDamage = 30f, payloadSize = 20f },
+                new StockpileEntry { part = missilePart, startingCount = StartingMissileCount, rawDamage = 30f, payloadSize = 20f },
             };
             controller.defenderLoadout = new StockpileEntry[0];
             controller.timeLimitSeconds = 180f;
@@ -101,7 +106,7 @@ namespace Vanquish.Combat.Play
             return controller;
         }
 
-        private static GameObject BuildPlayerDrone(EngagementController engagementController)
+        private static GameObject BuildPlayerDrone(EngagementController engagementController, DroneRotorConfiguration rotorConfiguration)
         {
             var drone = new GameObject("Player Drone");
             drone.transform.position = new Vector3(0f, 5f, 0f);
@@ -115,7 +120,9 @@ namespace Vanquish.Combat.Play
             var flightBody = drone.AddComponent<FlightBody>();
             flightBody.Configure(mass: 8f, thrust: 0f, drag: 1.2f, maxG: 6f, gravity: false, orientToVel: false);
 
-            Transform visualRoot = DroneVisualBuilder.Build(drone.transform, new Color(0.2f, 0.7f, 0.9f));
+            Transform visualRoot = DroneVisualBuilder.Build(
+                drone.transform, new Color(0.2f, 0.7f, 0.9f), rotorConfiguration,
+                out Transform[] hardpoints, hardpointCount: StartingMissileCount);
 
             var tilt = drone.AddComponent<QuadcopterTiltVisual>();
             tilt.body = rigidbody;
@@ -127,6 +134,15 @@ namespace Vanquish.Combat.Play
             weapon.target = engagementController.Objective.Damageable.transform;
             weapon.fireCooldownSeconds = 1.2f;
             weapon.launchOffset = new Vector3(0f, -0.2f, 0.6f);
+
+            // Mount one visible missile prop per hardpoint (matching StartingMissileCount)
+            // and wire them to visually deplete as WeaponController.Fire() succeeds.
+            var mountedVisuals = new List<Transform>();
+            foreach (Transform hardpoint in hardpoints)
+                mountedVisuals.Add(DroneVisualBuilder.BuildMountedMissileProp(hardpoint).transform);
+
+            var mountedMissileVisuals = drone.AddComponent<MountedMissileVisuals>();
+            mountedMissileVisuals.Initialize(weapon, mountedVisuals);
 
             drone.AddComponent<PlayerDroneController>();
 

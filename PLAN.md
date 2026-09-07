@@ -594,7 +594,13 @@ real theatre map.
       the Command & Control Model section needs AI-controlled units to hand control
       between, which don't exist in-scene yet); fixed-wing/jet control scheme (the
       pre-pivot project has one, deliberately not ported — out of scope for tier 0/1
-      multirotors).
+      multirotors). Visual follow-up: `DroneVisualBuilder` now more closely matches
+      that project's multirotor silhouette (body + N arms in an "X" configuration,
+      each with a spinning rotor, plus hardpoint-mounted missile props that visually
+      deplete per shot via `MountedMissileVisuals`), and a `DroneRotorConfiguration`
+      enum (`Quadcopter`/`Hexacopter`) keeps the hexacopter one flip away — same
+      builder, different rotor count — for whenever a heavier-lift/higher-tier design
+      is needed, per the plan's "quadcopters vs. hexacopters" framing.
 - [x] Extend `SeekerType`/guidance data to distinguish autonomous seekers,
       command-guided/datalink, and **laser-designated** (new enum value; also added
       **anti-radiation**, needed for Wild Weasel below). `Data/SeekerControlModel.cs`

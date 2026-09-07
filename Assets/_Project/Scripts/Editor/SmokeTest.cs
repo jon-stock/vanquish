@@ -619,7 +619,7 @@ namespace Vanquish.EditorTools
 
                 var controller = UnityEngine.Object.FindFirstObjectByType<EngagementController>();
                 Expect(controller != null, "FlightTestHarness.Build should create an EngagementController");
-                Expect(controller != null && controller.Attacker.RemainingCount("flighttest.missile") == 8, "Attacker stockpile should start with 8 missiles");
+                Expect(controller != null && controller.Attacker.RemainingCount("flighttest.missile") == 4, "Attacker stockpile should start with 4 missiles");
                 Expect(controller != null && controller.Objective != null && ReferenceEquals(controller.Objective, objective), "EngagementController's objective should be the same BaseObjective instance");
 
                 var weapon = UnityEngine.Object.FindFirstObjectByType<WeaponController>();
@@ -640,12 +640,18 @@ namespace Vanquish.EditorTools
                 var hud = UnityEngine.Object.FindFirstObjectByType<FlightHUD>();
                 Expect(hud != null, "FlightTestHarness.Build should create a FlightHUD");
 
-                // Actually firing should consume stockpile — exercises the real
-                // WeaponController -> EngagementController -> Stockpile pipeline
-                // end-to-end, same as a mouse click would in Play mode.
+                var mountedVisuals = weapon.GetComponent<MountedMissileVisuals>();
+                Expect(mountedVisuals != null, "Drone should have MountedMissileVisuals");
+                Expect(mountedVisuals != null && mountedVisuals.MountedCount == 4, "Drone should start with 4 visibly mounted missile props (one per hardpoint)");
+
+                // Actually firing should consume stockpile AND remove one mounted
+                // visual — exercises the real WeaponController -> EngagementController
+                // -> Stockpile pipeline, and the visual-depletion wiring, end-to-end,
+                // same as a mouse click would in Play mode.
                 bool fired = weapon.Fire();
                 Expect(fired, "Weapon.Fire() should succeed with full ammo and a valid target");
-                Expect(controller.Attacker.RemainingCount("flighttest.missile") == 7, "Firing once should consume one missile from the stockpile");
+                Expect(controller.Attacker.RemainingCount("flighttest.missile") == 3, "Firing once should consume one missile from the stockpile");
+                Expect(mountedVisuals != null && mountedVisuals.MountedCount == 3, "Firing once should visually remove one mounted missile prop");
 
                 var spawnedMissile = UnityEngine.Object.FindFirstObjectByType<MissileImpact>();
                 Expect(spawnedMissile != null, "Firing should spawn a missile with a MissileImpact component");

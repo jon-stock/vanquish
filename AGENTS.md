@@ -113,6 +113,15 @@ and a real missile GameObject gets spawned — this catches wiring mistakes (nul
 mismatched part ids) headlessly, though it cannot exercise real player input or
 physics collisions that way.
 
+The drone visual (body/arms/spinning rotors/mounted-missile props that visually
+deplete per shot — `DroneVisualBuilder`/`MountedMissileVisuals`) is built to more
+closely match the pre-pivot project's multirotor silhouette. `FlightTestHarness`
+exposes a public `rotorConfiguration` field
+(`Vanquish.Combat.Play.DroneRotorConfiguration`: `Quadcopter` or `Hexacopter`) —
+quadcopter is Phase 1's focus, but the hexacopter is kept one flip away (same visual
+builder, just a different rotor count) for whenever a heavier-lift/higher-tier design
+is needed.
+
 ## Commit policy
 
 Commit changes to git (and push to `origin`) after each set of changes you make to
