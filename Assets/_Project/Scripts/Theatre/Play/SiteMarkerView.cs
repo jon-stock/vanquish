@@ -50,6 +50,7 @@ namespace Vanquish.Theatre.Play
             SiteType.RadarInstallation => 0.8f,
             SiteType.Warehouse => 0.45f,
             SiteType.ReconStation => 0.4f,
+            SiteType.Lab => 0.75f,
             _ => 0.5f,
         };
     }

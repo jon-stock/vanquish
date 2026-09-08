@@ -63,6 +63,8 @@ namespace Vanquish.EditorTools
             TestHexMeshFactoryAxialToWorldMatchesNeighborSpacing();
             TestHexMeshFactoryPrismCapsFaceOutward();
             TestTheatreMapHarnessBuildsAClickableMap();
+            TestTheatreMapHarnessBuildMenu();
+            TestTheatreMapHarnessLabAndFactoryProduction();
 
             if (_failures > 0)
             {
@@ -853,6 +855,134 @@ namespace Vanquish.EditorTools
             {
                 // Everything Build() creates is parented under the harness GameObject,
                 // so destroying it alone is sufficient cleanup.
+                UnityEngine.Object.DestroyImmediate(harnessGo);
+            }
+        }
+
+        private static void TestTheatreMapHarnessBuildMenu()
+        {
+            var harnessGo = new GameObject("SmokeTest_TheatreMapHarness_BuildMenu");
+            try
+            {
+                var harness = harnessGo.AddComponent<TheatreMapHarness>();
+                harness.Build();
+
+                int siteCountBefore = harnessGo.GetComponentsInChildren<SiteMarkerView>().Length;
+                Expect(siteCountBefore == 4, $"Should start with the 4 seeded sites, got {siteCountBefore}");
+
+                // An empty, Open, Player-owned hex should be buildable.
+                HexTile emptyOpenPlayerHex = harness.World.Grid.Tiles.FirstOrDefault(t =>
+                    t.Owner == TheatreFaction.Player && t.Terrain == TerrainType.Open && !harness.HasActiveSite(t.Coordinate));
+                Expect(emptyOpenPlayerHex != null, "There should be at least one empty, open, Player-owned hex");
+
+                harness.SelectTile(emptyOpenPlayerHex);
+                Expect(harness.CanBuildOnSelectedTile(), "Empty open Player-owned hex should be buildable");
+
+                bool started = harness.TryBeginConstructionOnSelectedTile(SiteType.Warehouse, 2);
+                Expect(started, "TryBeginConstructionOnSelectedTile should succeed on a buildable hex");
+                Expect(harness.HasActiveSite(emptyOpenPlayerHex.Coordinate), "Hex should now have an active (under-construction) site");
+                Expect(!harness.CanBuildOnSelectedTile(), "Hex should no longer be buildable once occupied");
+
+                int siteCountAfter = harnessGo.GetComponentsInChildren<SiteMarkerView>().Length;
+                Expect(siteCountAfter == siteCountBefore + 1, $"Should have created one new SiteMarkerView, got {siteCountAfter - siteCountBefore} new");
+
+                Site newSite = harness.World.Sites.First(s => s.Location.Equals(emptyOpenPlayerHex.Coordinate) && s.Type == SiteType.Warehouse);
+                Expect(newSite.State == SiteState.UnderConstruction, "New site should start under construction");
+                Expect(newSite.TurnsRemaining == 2, $"New site should need 2 turns, got {newSite.TurnsRemaining}");
+
+                harness.AdvanceTurn();
+                Expect(newSite.State == SiteState.UnderConstruction && newSite.TurnsRemaining == 1, "Site should still be under construction after 1 of 2 turns");
+
+                harness.AdvanceTurn();
+                Expect(newSite.IsOperational, "Site should become Operational after its construction turns complete via the normal Advance Turn flow");
+
+                // A Player-owned Road hex should NOT be buildable (blocked terrain).
+                HexTile playerRoadHex = harness.World.Grid.Tiles.FirstOrDefault(t =>
+                    t.Owner == TheatreFaction.Player && t.Terrain == TerrainType.Road && !harness.HasActiveSite(t.Coordinate));
+                Expect(playerRoadHex != null, "There should be at least one empty Player-owned Road hex");
+                harness.SelectTile(playerRoadHex);
+                Expect(!harness.CanBuildOnSelectedTile(), "Road terrain should not be buildable");
+
+                // An Enemy-owned hex should never be buildable regardless of terrain.
+                HexTile enemyHex = harness.World.Grid.Tiles.First(t => t.Owner == TheatreFaction.Enemy);
+                harness.SelectTile(enemyHex);
+                Expect(!harness.CanBuildOnSelectedTile(), "Enemy-owned hex should never be buildable");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(harnessGo);
+            }
+        }
+
+        private static void TestTheatreMapHarnessLabAndFactoryProduction()
+        {
+            var harnessGo = new GameObject("SmokeTest_TheatreMapHarness_LabFactory");
+            try
+            {
+                var harness = harnessGo.AddComponent<TheatreMapHarness>();
+                harness.Build();
+
+                SiteBuildOption labOption = SiteBuildCatalog.Options.FirstOrDefault(o => o.Type == SiteType.Lab);
+                Expect(labOption.DisplayName != null, "SiteBuildCatalog should offer a Lab option");
+
+                // --- Build a Lab ---
+                HexTile labHex = harness.World.Grid.Tiles.FirstOrDefault(t =>
+                    t.Owner == TheatreFaction.Player && t.Terrain == TerrainType.Open && !harness.HasActiveSite(t.Coordinate));
+                Expect(labHex != null, "There should be an empty open Player hex to build a Lab on");
+                harness.SelectTile(labHex);
+
+                Expect(!harness.CanDesignPlanAtSelectedTile(), "No Lab exists yet — should not be able to design a plan");
+                Expect(harness.TryBeginConstructionOnSelectedTile(SiteType.Lab, labOption.TurnsToBuild), "Should be able to start building a Lab here");
+
+                for (int i = 0; i < labOption.TurnsToBuild; i++)
+                    harness.AdvanceTurn();
+
+                harness.SelectTile(labHex); // re-select: AdvanceTurn doesn't change SelectedTile, but be explicit
+                Expect(harness.CanDesignPlanAtSelectedTile(), "Lab should be operational and selectable for plan design after enough turns");
+
+                // --- Design plans ---
+                Expect(!harness.TryCreatePlan("", UnitCategory.Quadcopter, out _), "Empty plan name should be rejected");
+                Expect(harness.TryCreatePlan("Falcon", UnitCategory.Quadcopter, out string err1), $"Valid plan should be accepted, got error: {err1}");
+                Expect(harness.PlayerPlans.Count == 1, $"Should have 1 designed plan, got {harness.PlayerPlans.Count}");
+                Expect(!harness.TryCreatePlan("falcon", UnitCategory.Missile, out string err2), "Duplicate name (case-insensitive) should be rejected");
+                Expect(err2 != null, "Duplicate-name rejection should include an error message");
+
+                GameObject showcase = GameObject.Find("PlanShowcase");
+                Expect(showcase != null, "Selecting the Lab with designed plans should build a PlanShowcase");
+                Expect(showcase != null && showcase.transform.childCount == 1, $"Showcase should have one preview slot per plan, got {showcase?.transform.childCount}");
+
+                DronePlan falcon = harness.PlayerPlans[0];
+
+                // --- Queue production at the seeded Player factory ---
+                Site playerFactory = harness.World.Sites.First(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.Factory);
+                HexTile factoryHex = harness.World.Grid.GetTile(playerFactory.Location);
+                harness.SelectTile(factoryHex);
+
+                Expect(harness.SelectedFactory() == playerFactory, "Selecting the Player factory's hex should resolve it via SelectedFactory()");
+                Expect(harness.TryQueueProduction(falcon), "Should be able to queue the Falcon for production");
+
+                var queue = harness.ProductionQueueAt(playerFactory);
+                Expect(queue.Count == 1, $"Factory should have 1 queued order, got {queue.Count}");
+                int expectedTurns = TheatreMapHarness.TurnsToProduce(UnitCategory.Quadcopter);
+                Expect(queue[0].TurnsRemaining == expectedTurns, $"Queued order should need {expectedTurns} turns, got {queue[0].TurnsRemaining}");
+
+                for (int i = 0; i < expectedTurns - 1; i++)
+                    harness.AdvanceTurn();
+                Expect(harness.ProductionQueueAt(playerFactory).Count == 1, "Order should still be in progress before its last turn");
+                Expect(!harness.PlayerInventory.ContainsKey(falcon), "Inventory should not have the plan yet before production completes");
+
+                harness.AdvanceTurn();
+                Expect(harness.ProductionQueueAt(playerFactory).Count == 0, "Order should be removed from the queue once complete");
+                Expect(harness.PlayerInventory.TryGetValue(falcon, out int producedCount) && producedCount == 1,
+                    $"Inventory should have 1 Falcon after production completes, got {(harness.PlayerInventory.TryGetValue(falcon, out int c) ? c : -1)}");
+
+                // Selecting a non-factory tile should not resolve a factory.
+                harness.SelectTile(labHex);
+                Expect(harness.SelectedFactory() == null, "A Lab hex should not resolve as a factory");
+                Expect(!harness.TryQueueProduction(falcon), "Queuing production without a selected factory should fail");
+            }
+            finally
+            {
                 UnityEngine.Object.DestroyImmediate(harnessGo);
             }
         }

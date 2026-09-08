@@ -14,5 +14,8 @@ namespace Vanquish.Theatre
         RadarInstallation,
         LaunchPlatform,
         ReconStation,
+
+        /// <summary>Where the player designs new drone/missile "Plans" (see PLAN.md Theatre.Play — DronePlan/PlanCatalog) and, eventually, researches tech.</summary>
+        Lab,
     }
 }

@@ -715,13 +715,30 @@ all turn-based, feeding into and out of combat instances.
       **Deferred**, but `Site.ApplyDamage` exists specifically so this is a wiring
       task (read an `EngagementController`'s result, call `ApplyDamage` on the
       matching `Site`) rather than new modeling work, when it's tackled.
-- [ ] Army building UI / **Personnel system** (hireable operators, rank, permadeath) /
-      **Base destruction consequence** / theatre-level AI opponent. **All deferred**
-      — no UI exists yet at all (consistent with Phase 1), and personnel is a
-      substantial system (hiring economy, rank progression, `SaveData` roster
-      extension) that deserves its own pass rather than being bolted on. `Site`'s
-      `ApplyDamage`/`Destroyed` state is the ready-made hook for "base destroyed kills
-      its operators" once personnel exists.
+- [~] **Army building UI**: a real first slice now exists. A new `SiteType.Lab`
+      (added to `SiteBuildCatalog`) is where the player designs named **Plans**
+      (`DronePlan`: name + `UnitCategory` — Quadcopter/Hexacopter/Missile — + an
+      accent color) — names must be non-empty and unique. An **Operational Factory**
+      then lists every designed Plan with a turn-costed "Build" button; queued
+      `ProductionOrder`s tick down via the existing `AdvanceTurn` flow and land in a
+      simple player-wide `PlayerInventory` count once complete — no new turn-engine
+      code needed, this is pure UI/data layered on Phase 2's existing `Site`
+      lifecycle. Plans get an actual **3D preview model** next to whichever Lab/
+      Factory is selected (`PlanPreviewBuilder`, reusing `Combat/Play/
+      DroneVisualBuilder` for quad/hex plans) — "shown what they look like," not just
+      named in a list, per direct request. **Not yet done**: this is still a POC
+      design system (name + category + color only) — not the full modular part-
+      composition design system the combat-instance side already has (real stats,
+      payload/hardness tradeoffs); tech research at a Lab (the panel says so
+      explicitly rather than silently ignoring it); and produced inventory doesn't
+      yet feed into an actual `Combat.Stockpile`/spawned unit anywhere — it's a
+      count, not yet connected to Phase 1's combat instances. **Personnel system**
+      (hireable operators, rank, permadeath) / **Base destruction consequence** /
+      theatre-level AI opponent remain fully deferred — personnel is a substantial
+      system (hiring economy, rank progression, `SaveData` roster extension) that
+      deserves its own pass rather than being bolted on. `Site`'s `ApplyDamage`/
+      `Destroyed` state is the ready-made hook for "base destroyed kills its
+      operators" once personnel exists.
 
 **Note on scope across this phase's passes:** same approach as Phases 0/1 — built the
 pure logic/data foundations (hex grid, sites, movement, turn resolution, victory

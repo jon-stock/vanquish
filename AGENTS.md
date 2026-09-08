@@ -106,6 +106,20 @@ instance-to-theatre feedback loop exists). "Advance Turn" ticks site constructio
 production and checks both victory conditions (economic collapse, sustained
 territorial control) live.
 
+Owned empty hexes also get a **"Build here"** menu (`SiteBuildCatalog`: Factory,
+Warehouse, Base, Airstrip, Radar Installation, Recon Station, Lab — each with a turn
+cost), blocked on Mountain/Road terrain or an already-occupied hex. Selecting an
+**Operational, owned Lab** opens a design panel: name a new Plan (must be non-empty
+and unique) and pick Quadcopter/Hexacopter/Missile — designed Plans get an actual 3D
+preview model next to the Lab (`PlanPreviewBuilder`, reusing `Combat/Play/
+DroneVisualBuilder` for quad/hex plans), not just a name in a list. Selecting an
+**Operational, owned Factory** opens a production panel listing every designed Plan
+with a "Build (Nt)" button; queued orders tick down via the normal Advance Turn flow
+and land in a simple player-wide inventory count once complete. The same 3D preview
+also appears next to whichever Factory is selected, showing what it's building.
+Tech research at a Lab is not implemented yet (a placeholder note says so in the
+panel) — see PLAN.md for what's deferred.
+
 Regenerate via `Vanquish.EditorTools.SceneBuilder.BuildPhase2TheatreMapScene`.
 `TheatreMapHarness.Build()` is exercised directly by `SmokeTest` (grid/site counts,
 capture eligibility logic on both a front-line and a deep-territory hex, turn
