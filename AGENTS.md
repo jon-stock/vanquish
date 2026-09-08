@@ -1,5 +1,33 @@
 # Agent Notes — Vanquish
 
+## Save data policy — keep it in sync with new features
+
+The theatre map has a real save/load system (`Core/SaveData.cs`/`SaveSystem.cs`,
+reachable via the Escape pause menu — see below). **Whenever you add a new piece of
+persistent player state to the theatre map, extend `SaveData` and
+`TheatreMapHarness.SaveGame`/`ApplySaveData` (or the equivalent for whatever system
+you're adding) in the same change, not as a follow-up.** It's easy to add a new
+feature (a new site type's extra fields, a new per-Plan stat, a new resource, a new
+per-tile flag, etc.), forget the save file doesn't know about it, and end up with data
+that silently vanishes on save/load or New Game — the player has no way to know their
+progress on that feature isn't actually being persisted until they lose it.
+
+Concretely, when adding a feature, ask: "if the player saves, loads, or starts a new
+game right after using this, does it survive?" If not, either add the field(s) to
+`SaveData` (see `SavedHexOwnership`/`SavedSite`/`SavedPlan`/`SavedInventoryEntry` for
+the existing pattern — plain serializable data, enums stored as strings so `Core`
+doesn't need to depend on `Vanquish.Theatre`) and wire it into both `SaveGame` and
+`ApplySaveData`, or explicitly document in `PLAN.md`/a code comment that it's
+deliberately not saved yet and why (matching how turn number, resource pool, and
+production queues are currently called out as known, deliberate gaps — not
+oversights). Silent gaps are the failure mode to avoid; explicit, documented gaps are
+fine.
+
+If you add an entirely new save-load-worthy subsystem outside the theatre map (e.g.
+personnel/operators once that exists), it's fine to give it its own saved-state
+section following the same plain-DTO-with-string-enums pattern, rather than trying to
+force everything through the existing theatre-specific fields.
+
 ## Unity Editor location
 
 Unity is installed outside Unity Hub's default location. The Editor executable is:
