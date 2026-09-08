@@ -54,6 +54,8 @@ namespace Vanquish.Theatre.Play
         public TheatreTurnController Controller { get; private set; }
         public HexTile SelectedTile { get; private set; }
 
+        private TerritorialControlCondition _territorialCondition;
+
         /// <summary>Every Plan the player has designed at any Lab so far (POC scope: Player only, one shared catalog rather than per-Lab).</summary>
         public List<DronePlan> PlayerPlans { get; } = new List<DronePlan>();
 
@@ -80,10 +82,11 @@ namespace Vanquish.Theatre.Play
             BuildTiles(grid);
             BuildSites();
 
+            _territorialCondition = new TerritorialControlCondition(requiredFraction: 0.75f, requiredConsecutiveTurns: 3);
             Controller = new TheatreTurnController(World, new ITheatreVictoryCondition[]
             {
                 new EconomicCollapseCondition(),
-                new TerritorialControlCondition(requiredFraction: 0.75f, requiredConsecutiveTurns: 3),
+                _territorialCondition,
             });
 
             BuildCamera();
@@ -507,15 +510,25 @@ namespace Vanquish.Theatre.Play
         }
 
         /// <summary>
-        /// Captures and writes the four things explicitly asked for: tile ownership,
-        /// which buildings are on which tile, weapon (Plan) designs, and weapon
-        /// (Plan) inventory. Deliberately does NOT save turn number, resource pool,
-        /// in-progress production queues, or victory-condition sustain counters —
-        /// out of the requested scope for this pass; see PLAN.md for the note.
+        /// Captures and writes the full theatre-map state: tile ownership, which
+        /// buildings are on which tile, weapon (Plan) designs, weapon (Plan)
+        /// inventory, the turn counter and result, the per-faction resource pool,
+        /// in-progress Factory production orders, and the territorial-control
+        /// sustain counters — every piece of persistent player-facing state this
+        /// harness currently tracks. Camera position/selection are deliberately not
+        /// saved (transient UI state, not player progress).
         /// </summary>
         public void SaveGame()
         {
-            var data = new SaveData();
+            var data = new SaveData
+            {
+                currentTurn = Controller.CurrentTurn,
+                result = Controller.Result.ToString(),
+                playerResource = Controller.ResourcePool[TheatreFaction.Player],
+                enemyResource = Controller.ResourcePool[TheatreFaction.Enemy],
+                playerTerritorialSustainTurns = _territorialCondition.ConsecutiveTurnsMet(TheatreFaction.Player),
+                enemyTerritorialSustainTurns = _territorialCondition.ConsecutiveTurnsMet(TheatreFaction.Enemy),
+            };
 
             foreach (HexTile tile in World.Grid.Tiles)
             {
@@ -549,6 +562,20 @@ namespace Vanquish.Theatre.Play
 
             foreach (KeyValuePair<DronePlan, int> entry in PlayerInventory)
                 data.inventory.Add(new SavedInventoryEntry { planName = entry.Key.Name, count = entry.Value });
+
+            foreach (KeyValuePair<Site, List<ProductionOrder>> queueEntry in _productionQueues)
+            {
+                foreach (ProductionOrder order in queueEntry.Value)
+                {
+                    data.productionOrders.Add(new SavedProductionOrder
+                    {
+                        factoryQ = queueEntry.Key.Location.Q,
+                        factoryR = queueEntry.Key.Location.R,
+                        planName = order.Plan.Name,
+                        turnsRemaining = order.TurnsRemaining,
+                    });
+                }
+            }
 
             SaveSystem.Save(data);
         }
@@ -608,6 +635,28 @@ namespace Vanquish.Theatre.Play
                 if (plan != null)
                     PlayerInventory[plan] = saved.count;
             }
+
+            foreach (SavedProductionOrder saved in data.productionOrders)
+            {
+                Site factory = World.Sites.FirstOrDefault(s => s.Type == SiteType.Factory && s.Location.Equals(new HexCoordinate(saved.factoryQ, saved.factoryR)));
+                DronePlan plan = PlayerPlans.FirstOrDefault(p => p.Name == saved.planName);
+                if (factory == null || plan == null)
+                    continue;
+
+                if (!_productionQueues.TryGetValue(factory, out List<ProductionOrder> queue))
+                {
+                    queue = new List<ProductionOrder>();
+                    _productionQueues[factory] = queue;
+                }
+                queue.Add(new ProductionOrder(plan, saved.turnsRemaining));
+            }
+
+            Enum.TryParse(data.result, out TheatreResult result);
+            Controller.RestoreProgress(data.currentTurn, result);
+            Controller.ResourcePool[TheatreFaction.Player] = data.playerResource;
+            Controller.ResourcePool[TheatreFaction.Enemy] = data.enemyResource;
+            _territorialCondition.RestoreConsecutiveTurns(TheatreFaction.Player, data.playerTerritorialSustainTurns);
+            _territorialCondition.RestoreConsecutiveTurns(TheatreFaction.Enemy, data.enemyTerritorialSustainTurns);
 
             SelectedTile = null;
             RefreshShowcaseForSelection();

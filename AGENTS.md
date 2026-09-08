@@ -149,12 +149,16 @@ Tech research at a Lab is not implemented yet (a placeholder note says so in the
 panel) — see PLAN.md for what's deferred.
 
 **Escape** opens a pause menu (`GameMenuController`): Save Game, Load Game, New Game
-(wipes and rebuilds the map fresh), and Quit. Save/Load round-trip exactly the four
-things asked for — tile ownership, which sites are on which tile (type/owner/state/
-turns-remaining/health), designed Plans, and produced inventory — via `Core/
-SaveData.cs`/`SaveSystem.cs` (JSON, `Site.Restore(...)` reconstructs a site directly
-into its saved state). Turn number, resource pool, and in-progress production queues
-are deliberately not saved yet (out of the requested scope for this pass).
+(wipes and rebuilds the map fresh), and Quit. Save/Load round-trips every piece of
+persistent theatre-map state: tile ownership, which sites are on which tile (type/
+owner/state/turns-remaining/health), designed Plans, produced inventory, the turn
+counter and result, the per-faction resource pool, in-progress Factory production
+orders, and the territorial-control victory condition's sustain-turn counters (via
+`Core/SaveData.cs`/`SaveSystem.cs`, JSON; `Site.Restore(...)` reconstructs a site
+directly into its saved state; `TheatreTurnController.RestoreProgress`/
+`TerritorialControlCondition.RestoreConsecutiveTurns` restore the rest). Camera
+position/current selection are deliberately not saved (transient UI state, not player
+progress).
 
 Clicking a button in the corner panel or the pause menu no longer "reaches through"
 to the 3D scene underneath (the previously-reported focus/selection bug) —

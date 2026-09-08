@@ -739,14 +739,20 @@ all turn-based, feeding into and out of combat instances.
       deserves its own pass rather than being bolted on. `Site`'s `ApplyDamage`/
       `Destroyed` state is the ready-made hook for "base destroyed kills its
       operators" once personnel exists.
-- [~] **Save/Load**: a real save system now exists (`Core/SaveData.cs`/
+- [x] **Save/Load**: a real save system now exists (`Core/SaveData.cs`/
       `SaveSystem.cs`, JSON via `JsonUtility`, `Site.Restore(...)` for exact site
       reconstruction), reachable via an Escape pause menu (`GameMenuController`: Save,
-      Load, New Game, Quit). Saves exactly the four things asked for: tile ownership,
-      which sites are on which tile (full state, not just "it exists"), designed
-      Plans, and produced inventory. **Not yet saved**: turn number, resource pool,
-      in-progress production queues, victory-condition sustain-counters, or camera
-      position — deliberately out of the requested scope for this pass.
+      Load, New Game, Quit). Now saves every piece of persistent theatre-map state:
+      tile ownership, which sites are on which tile (full state, not just "it
+      exists"), designed Plans, produced inventory, the turn counter and result, the
+      per-faction resource pool, in-progress Factory production orders
+      (`SavedProductionOrder`), and the territorial-control victory condition's
+      sustain-turn counters (`TerritorialControlCondition.ConsecutiveTurnsMet`/
+      `RestoreConsecutiveTurns`) — turn number was flagged as a known gap and has
+      since been closed, and a follow-up audit for "anything else worth saving"
+      closed resource pool/production queues/sustain counters too. **Still not
+      saved, deliberately**: camera position and current hex selection (transient UI
+      state, not player progress).
 
 **Note on scope across this phase's passes:** same approach as Phases 0/1 — built the
 pure logic/data foundations (hex grid, sites, movement, turn resolution, victory

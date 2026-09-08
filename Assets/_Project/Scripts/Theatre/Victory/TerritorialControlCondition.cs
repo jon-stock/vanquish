@@ -25,6 +25,12 @@ namespace Vanquish.Theatre
             _requiredConsecutiveTurns = requiredConsecutiveTurns;
         }
 
+        /// <summary>How many consecutive turns this faction has already sustained the ownership threshold for — save/load restoration and UI display.</summary>
+        public int ConsecutiveTurnsMet(TheatreFaction faction) => _consecutiveTurnsMet.TryGetValue(faction, out int turns) ? turns : 0;
+
+        /// <summary>Directly sets the sustain counter — save/load restoration only, not part of normal evaluation.</summary>
+        public void RestoreConsecutiveTurns(TheatreFaction faction, int turns) => _consecutiveTurnsMet[faction] = turns;
+
         public TheatreFaction? Evaluate(TheatreWorldState state)
         {
             foreach (TheatreFaction faction in new[] { TheatreFaction.Player, TheatreFaction.Enemy })

@@ -586,7 +586,17 @@ namespace Vanquish.EditorTools
             Expect(Math.Abs(grid.OwnershipFraction(TheatreFaction.Player) - 0.75f) < 0.001f, "Player should own exactly 75% of the 4 contestable hexes");
 
             Expect(condition.Evaluate(world) == null, "First turn meeting the threshold should not win yet — needs to be sustained");
+            Expect(condition.ConsecutiveTurnsMet(TheatreFaction.Player) == 1, $"Player should have 1 consecutive turn met so far, got {condition.ConsecutiveTurnsMet(TheatreFaction.Player)}");
+            Expect(condition.ConsecutiveTurnsMet(TheatreFaction.Enemy) == 0, "Enemy never met the threshold, so should have 0 consecutive turns");
+
             Expect(condition.Evaluate(world) == TheatreFaction.Player, "Second consecutive turn meeting the threshold should win for Player");
+
+            // Save/load restoration: a fresh condition instance should be able to
+            // pick up exactly where a saved sustain-counter left off.
+            var restored = new TerritorialControlCondition(requiredFraction: 0.75f, requiredConsecutiveTurns: 2);
+            restored.RestoreConsecutiveTurns(TheatreFaction.Player, 1);
+            Expect(restored.ConsecutiveTurnsMet(TheatreFaction.Player) == 1, "RestoreConsecutiveTurns should be reflected by ConsecutiveTurnsMet");
+            Expect(restored.Evaluate(world) == TheatreFaction.Player, "A restored count of 1 (of 2 required) should win on the very next Evaluate, same as if it had never been saved/loaded");
         }
 
         private static void TestTheatreTurnControllerIntegration()
@@ -1024,12 +1034,23 @@ namespace Vanquish.EditorTools
                     harness.AdvanceTurn();
                 Expect(harness.PlayerInventory.TryGetValue(falcon, out int producedBefore) && producedBefore == 1, "Setup: Falcon production should have completed");
 
+                // Queue a second order that will NOT complete before saving, so the
+                // in-progress queue itself (not just completed inventory) round-trips.
+                Expect(harness.TryQueueProduction(falcon), "Setup: queuing a second Falcon should succeed");
+
+                int turnBeforeSave = harness.Controller.CurrentTurn;
+                int playerResourceBeforeSave = harness.Controller.ResourcePool[TheatreFaction.Player];
+                int enemyResourceBeforeSave = harness.Controller.ResourcePool[TheatreFaction.Enemy];
+                Expect(turnBeforeSave > 0, "Setup: some turns should have passed by now");
+                Expect(playerResourceBeforeSave > 0, "Setup: the Player factory should have produced some resources by now");
+
                 // --- Save, reset to a brand new game, then load back ---
                 harness.SaveGame();
                 harness.NewGame();
 
                 Expect(harness.World.Grid.GetTile(capturedCoord).Owner == TheatreFaction.Enemy, "New game should reset the captured hex back to its default owner");
                 Expect(harness.PlayerPlans.Count == 0, "New game should clear designed plans");
+                Expect(harness.Controller.CurrentTurn == 0, "New game should reset the turn counter");
 
                 Expect(harness.LoadGame(), "LoadGame should succeed since a save was just written");
 
@@ -1048,6 +1069,16 @@ namespace Vanquish.EditorTools
 
                 Site loadedFactory = harness.World.Sites.FirstOrDefault(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.Factory);
                 Expect(loadedFactory != null && loadedFactory.IsOperational, "Loaded game should restore the seeded Player factory");
+
+                Expect(harness.Controller.CurrentTurn == turnBeforeSave, $"Loaded game should restore the turn counter (expected {turnBeforeSave}, got {harness.Controller.CurrentTurn})");
+                Expect(harness.Controller.Result == TheatreResult.InProgress, "Loaded game should restore the result");
+                Expect(harness.Controller.ResourcePool[TheatreFaction.Player] == playerResourceBeforeSave, "Loaded game should restore the Player resource pool");
+                Expect(harness.Controller.ResourcePool[TheatreFaction.Enemy] == enemyResourceBeforeSave, "Loaded game should restore the Enemy resource pool");
+
+                var loadedQueue = harness.ProductionQueueAt(loadedFactory);
+                Expect(loadedQueue.Count == 1, $"Loaded game should restore the still-in-progress production order, got {loadedQueue.Count}");
+                Expect(loadedQueue.Count == 1 && loadedQueue[0].Plan.Name == "Falcon" && loadedQueue[0].TurnsRemaining == TheatreMapHarness.TurnsToProduce(UnitCategory.Quadcopter),
+                    "Loaded production order should restore the correct plan and full remaining turns (it hadn't ticked at all before saving)");
             }
             finally
             {

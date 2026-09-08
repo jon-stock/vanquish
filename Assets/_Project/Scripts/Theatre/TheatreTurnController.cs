@@ -42,6 +42,13 @@ namespace Vanquish.Theatre
             _victoryConditions = new List<ITheatreVictoryCondition>(victoryConditions);
         }
 
+        /// <summary>Directly sets the turn counter and result — save/load restoration only (see Core/SaveData.cs), not part of normal turn resolution.</summary>
+        public void RestoreProgress(int turn, TheatreResult result)
+        {
+            CurrentTurn = turn;
+            Result = result;
+        }
+
         public void AdvanceTurn()
         {
             if (Result != TheatreResult.InProgress)
