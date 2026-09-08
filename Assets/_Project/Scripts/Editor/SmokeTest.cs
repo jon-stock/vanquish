@@ -61,6 +61,7 @@ namespace Vanquish.EditorTools
 
             // Phase 2 — visible/clickable theatre map
             TestHexMeshFactoryAxialToWorldMatchesNeighborSpacing();
+            TestHexMeshFactoryPrismCapsFaceOutward();
             TestTheatreMapHarnessBuildsAClickableMap();
 
             if (_failures > 0)
@@ -769,6 +770,22 @@ namespace Vanquish.EditorTools
                 Expect(Mathf.Abs(distance - expectedNeighborDistance) < 0.001f,
                     $"Neighbor {neighbor} should be sqrt(3)*radius from center, got {distance}");
             }
+        }
+
+        private static void TestHexMeshFactoryPrismCapsFaceOutward()
+        {
+            // Regression test: the top/bottom cap winding order was once swapped,
+            // which culled the top face entirely from above (the tile looked like an
+            // open-topped dish with no lid) — verify the actual computed vertex
+            // normals face outward (+Y top, -Y bottom), not just that "a mesh was
+            // returned." Vertex layout is CreateHexPrism's own: 0 = top center,
+            // 1-6 = top rim, 7 = bottom center, 8-13 = bottom rim.
+            Mesh mesh = HexMeshFactory.CreateHexPrism(radius: 1f, height: 0.6f);
+            Vector3[] normals = mesh.normals;
+
+            Expect(normals.Length >= 14, $"Prism mesh should have at least 14 vertices (2 caps + centers), got {normals.Length}");
+            Expect(normals[0].y > 0.9f, $"Top cap center's normal should face upward (+Y), got {normals[0]}");
+            Expect(normals[7].y < -0.9f, $"Bottom cap center's normal should face downward (-Y), got {normals[7]}");
         }
 
         private static void TestTheatreMapHarnessBuildsAClickableMap()

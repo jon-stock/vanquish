@@ -42,7 +42,11 @@ namespace Vanquish.Theatre.Play
             var vertices = new System.Collections.Generic.List<Vector3>();
             var triangles = new System.Collections.Generic.List<int>();
 
-            // Top cap (fan from a center vertex).
+            // Top cap (fan from a center vertex). Winding order here was verified by
+            // hand (cross product of the two fan edges) to face +Y — the previous
+            // (center, i, next) order actually faced -Y, culling the top face from
+            // above entirely (the tile looked like an open-topped dish/trough with
+            // no lid). (center, next, i) is the correct upward-facing order.
             int topCenter = vertices.Count;
             vertices.Add(new Vector3(0f, height * 0.5f, 0f));
             int topRimStart = vertices.Count;
@@ -51,11 +55,11 @@ namespace Vanquish.Theatre.Play
             {
                 int next = (i + 1) % 6;
                 triangles.Add(topCenter);
-                triangles.Add(topRimStart + i);
                 triangles.Add(topRimStart + next);
+                triangles.Add(topRimStart + i);
             }
 
-            // Bottom cap (reverse winding so it faces down).
+            // Bottom cap — opposite winding from the top so it faces -Y instead.
             int bottomCenter = vertices.Count;
             vertices.Add(new Vector3(0f, -height * 0.5f, 0f));
             int bottomRimStart = vertices.Count;
@@ -64,8 +68,8 @@ namespace Vanquish.Theatre.Play
             {
                 int next = (i + 1) % 6;
                 triangles.Add(bottomCenter);
-                triangles.Add(bottomRimStart + next);
                 triangles.Add(bottomRimStart + i);
+                triangles.Add(bottomRimStart + next);
             }
 
             // Side walls — one quad (2 triangles) per edge, own vertices (not shared
