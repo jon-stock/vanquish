@@ -19,15 +19,20 @@ namespace Vanquish.Theatre.Play
     /// construction/production and checks both victory conditions.
     ///
     /// To use: open Assets/_Project/Scenes/Phase2_TheatreMap.unity and press Play.
-    /// WASD pans the camera, scroll zooms, left-click selects a hex.
+    /// WASD or left-click-drag pans the camera, right-click-drag orbits it, scroll
+    /// zooms (smoothly), and clicking a hex without dragging selects it.
     /// </summary>
     public class TheatreMapHarness : MonoBehaviour
     {
         private const int Columns = 9;
         private const int Rows = 7;
         private const float HexRadius = 1f;
-        private const float HexHeight = 0.3f;
-        private const float MountainHeight = 1.4f;
+
+        // Tall enough relative to HexRadius to read as a solid block/tile with a
+        // flat lid you can see things resting on, not a thin flat disc (which, at a
+        // low camera angle, visually reads as a shallow dish instead of a tile).
+        private const float HexHeight = 0.6f;
+        private const float MountainHeight = 2f;
 
         private readonly Dictionary<HexCoordinate, HexTileView> _tileViews = new Dictionary<HexCoordinate, HexTileView>();
         private readonly List<SiteMarkerView> _siteViews = new List<SiteMarkerView>();
@@ -120,7 +125,7 @@ namespace Vanquish.Theatre.Play
             go.transform.SetParent(transform, worldPositionStays: true);
             go.transform.position = worldPos;
 
-            Mesh mesh = HexMeshFactory.CreateHexPrism(HexRadius * 0.96f, height); // slight gap between tiles reads as grid lines
+            Mesh mesh = HexMeshFactory.CreateHexPrism(HexRadius * 0.98f, height); // slight gap between tiles reads as grid lines
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             go.AddComponent<MeshRenderer>();
             go.AddComponent<MeshCollider>().sharedMesh = mesh;
@@ -174,19 +179,34 @@ namespace Vanquish.Theatre.Play
             cameraGo.AddComponent<AudioListener>();
             cameraGo.transform.position = gridCenter + new Vector3(0f, 16f, -10f);
             cameraGo.transform.LookAt(gridCenter);
-            cameraGo.AddComponent<TheatreMapCameraController>();
+
+            var cameraController = cameraGo.AddComponent<TheatreMapCameraController>();
+            cameraController.focusPoint = gridCenter;
         }
+
+        // Left mouse button now also drag-pans the camera (TheatreMapCameraController)
+        // — so a hex is only selected on mouse-up if the press-to-release movement
+        // stayed under this threshold, otherwise it was a drag, not a click.
+        private const float ClickDragThresholdPixels = 6f;
+        private Vector3 _mouseDownScreenPosition;
 
         private void Update()
         {
-            if (Input.GetMouseButtonDown(0) && Camera.main != null)
+            if (Input.GetMouseButtonDown(0))
+                _mouseDownScreenPosition = Input.mousePosition;
+
+            if (Input.GetMouseButtonUp(0) && Camera.main != null)
             {
-                Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-                if (Physics.Raycast(ray, out RaycastHit hit))
+                float dragDistance = Vector3.Distance(Input.mousePosition, _mouseDownScreenPosition);
+                if (dragDistance <= ClickDragThresholdPixels)
                 {
-                    var view = hit.collider.GetComponent<HexTileView>();
-                    if (view != null)
-                        SelectTile(view.Tile);
+                    Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+                    if (Physics.Raycast(ray, out RaycastHit hit))
+                    {
+                        var view = hit.collider.GetComponent<HexTileView>();
+                        if (view != null)
+                            SelectTile(view.Tile);
+                    }
                 }
             }
         }
@@ -273,7 +293,7 @@ namespace Vanquish.Theatre.Play
             GUI.enabled = true;
 
             GUILayout.Space(6);
-            GUILayout.Label("WASD pans, scroll zooms, left-click selects a hex.", Italic());
+            GUILayout.Label("WASD or left-drag pans, right-drag rotates, scroll zooms, click (without dragging) selects a hex.", Italic());
             GUILayout.EndArea();
         }
 

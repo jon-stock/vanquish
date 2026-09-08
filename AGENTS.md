@@ -96,8 +96,10 @@ of procedurally-meshed hexes (`HexMeshFactory` — no imported art, same convent
 the drone visuals), colored by terrain (open/road/mountain, mountains rendered
 taller) and by owner (blue Player / red Enemy), with a road cutting across the middle
 and a couple of mountain flanks for terrain variety. Two factories and two bases per
-side are rendered as simple colored markers. WASD pans the camera, scroll zooms,
-left-click selects a hex (shows its terrain/owner/site in the corner panel) — if the
+side are rendered as simple colored markers. WASD or left-click-drag pans the camera,
+right-click-drag orbits/rotates it, scroll zooms (smoothly — eases toward the target
+distance rather than snapping), and clicking a hex without dragging selects it (shows
+its terrain/owner/site in the corner panel) — if the
 selected hex is adjacent to Player territory, a "Capture this hex for Player" button
 appears (a simple stand-in for "won a combat instance here" until the real combat-
 instance-to-theatre feedback loop exists). "Advance Turn" ticks site construction/

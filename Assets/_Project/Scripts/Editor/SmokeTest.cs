@@ -792,6 +792,11 @@ namespace Vanquish.EditorTools
 
                 var camera = harnessGo.GetComponentInChildren<Camera>();
                 Expect(camera != null, "Build should create a camera");
+                var cameraController = harnessGo.GetComponentInChildren<TheatreMapCameraController>();
+                Expect(cameraController != null, "Build should attach a TheatreMapCameraController");
+                Expect(cameraController != null && cameraController.focusPoint != Vector3.zero,
+                    "Camera controller's focus point should be set to the grid center, not left at the default zero");
+
                 var tileViewCount = harnessGo.GetComponentsInChildren<HexTileView>().Length;
                 Expect(tileViewCount == 63, $"Should create one HexTileView per hex, got {tileViewCount}");
                 var siteViewCount = harnessGo.GetComponentsInChildren<SiteMarkerView>().Length;
