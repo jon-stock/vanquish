@@ -23,6 +23,57 @@ namespace Vanquish.Core
         public List<SavedDesign> droneDesigns = new List<SavedDesign>();
 
         public List<string> completedMissionIds = new List<string>();
+
+        // --- Theatre map state (PLAN.md Phase 2) ---
+        // Enums are stored as their string names (not the Theatre-namespace enum
+        // types directly) so this save schema doesn't need to reference/depend on
+        // Vanquish.Theatre at all, and stays robust to JsonUtility's handling of enums.
+
+        /// <summary>Every hex's current owner — only non-Neutral entries are stored, since Neutral is the default for anything not listed.</summary>
+        public List<SavedHexOwnership> hexOwnership = new List<SavedHexOwnership>();
+
+        /// <summary>Every non-destroyed site on the theatre map, in enough detail to fully restore its Site.Restore(...) state.</summary>
+        public List<SavedSite> sites = new List<SavedSite>();
+
+        /// <summary>Every Plan the player has designed at a Lab.</summary>
+        public List<SavedPlan> plans = new List<SavedPlan>();
+
+        /// <summary>Completed-production counts per Plan (matched back up by name at load time).</summary>
+        public List<SavedInventoryEntry> inventory = new List<SavedInventoryEntry>();
+    }
+
+    [Serializable]
+    public class SavedHexOwnership
+    {
+        public int q;
+        public int r;
+        public string owner;
+    }
+
+    [Serializable]
+    public class SavedSite
+    {
+        public string type;
+        public string owner;
+        public int q;
+        public int r;
+        public string state;
+        public int turnsRemaining;
+        public float healthFraction01;
+    }
+
+    [Serializable]
+    public class SavedPlan
+    {
+        public string name;
+        public string category;
+    }
+
+    [Serializable]
+    public class SavedInventoryEntry
+    {
+        public string planName;
+        public int count;
     }
 
     /// <summary>

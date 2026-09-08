@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using Vanquish.Core;
 using Vanquish.Theatre;
 
 namespace Vanquish.Theatre.Play
@@ -85,7 +87,29 @@ namespace Vanquish.Theatre.Play
             });
 
             BuildCamera();
+            BuildMenu();
         }
+
+        /// <summary>The corner info/build panel's screen rect — used to stop world-space clicks/drags/scrolls "reaching through" the UI (see IsPointerOverUI).</summary>
+        private readonly Rect _hudPanelRect = new Rect(20, 20, 400, 720);
+
+        /// <summary>
+        /// True if the mouse cursor is currently over the OnGUI panel. Checked by
+        /// both this harness's own click-to-select handling and the camera
+        /// controller's pan/orbit/zoom, so clicking a "Build"/"Advance Turn" button
+        /// etc. can never also select/deselect a hex or move the camera underneath it
+        /// (the original "focus goes when I click build" bug).
+        /// </summary>
+        public bool IsPointerOverUI()
+        {
+            Vector2 guiPoint = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
+            if (_hudPanelRect.Contains(guiPoint))
+                return true;
+
+            return _menu != null && _menu.IsPointerOverMenu();
+        }
+
+        private GameMenuController _menu;
 
         private void BuildLight()
         {
@@ -183,7 +207,7 @@ namespace Vanquish.Theatre.Play
             go.transform.SetParent(transform, worldPositionStays: true);
             go.transform.position = worldPos;
             go.transform.localScale = new Vector3(0.55f, markerHeight, 0.55f);
-            Object.Destroy(go.GetComponent<Collider>()); // purely a visual marker, not clickable itself
+            UnityEngine.Object.Destroy(go.GetComponent<Collider>()); // purely a visual marker, not clickable itself
 
             var marker = go.AddComponent<SiteMarkerView>();
             marker.Initialize(site);
@@ -204,6 +228,16 @@ namespace Vanquish.Theatre.Play
 
             var cameraController = cameraGo.AddComponent<TheatreMapCameraController>();
             cameraController.focusPoint = gridCenter;
+            cameraController.isPointerOverUI = IsPointerOverUI;
+        }
+
+        private void BuildMenu()
+        {
+            var menuGo = new GameObject("GameMenu");
+            menuGo.transform.SetParent(transform, worldPositionStays: true);
+            var menu = menuGo.AddComponent<GameMenuController>();
+            menu.harness = this;
+            _menu = menu;
         }
 
         // Left mouse button now also drag-pans the camera (TheatreMapCameraController)
@@ -211,13 +245,21 @@ namespace Vanquish.Theatre.Play
         // stayed under this threshold, otherwise it was a drag, not a click.
         private const float ClickDragThresholdPixels = 6f;
         private Vector3 _mouseDownScreenPosition;
+        private bool _mouseDownWasOverUI;
 
         private void Update()
         {
             if (Input.GetMouseButtonDown(0))
+            {
                 _mouseDownScreenPosition = Input.mousePosition;
+                _mouseDownWasOverUI = IsPointerOverUI();
+            }
 
-            if (Input.GetMouseButtonUp(0) && Camera.main != null)
+            // If the press started on a GUI button/panel (e.g. "Build", "Advance
+            // Turn"), never treat the eventual release as a world-space hex click —
+            // this was the actual cause of the reported "focus goes when I click
+            // build" bug (the click was reaching through to the 3D scene underneath).
+            if (Input.GetMouseButtonUp(0) && Camera.main != null && !_mouseDownWasOverUI)
             {
                 float dragDistance = Vector3.Distance(Input.mousePosition, _mouseDownScreenPosition);
                 if (dragDistance <= ClickDragThresholdPixels)
@@ -462,6 +504,134 @@ namespace Vanquish.Theatre.Play
                 view.Refresh();
             foreach (SiteMarkerView marker in _siteViews)
                 marker.Refresh();
+        }
+
+        /// <summary>
+        /// Captures and writes the four things explicitly asked for: tile ownership,
+        /// which buildings are on which tile, weapon (Plan) designs, and weapon
+        /// (Plan) inventory. Deliberately does NOT save turn number, resource pool,
+        /// in-progress production queues, or victory-condition sustain counters —
+        /// out of the requested scope for this pass; see PLAN.md for the note.
+        /// </summary>
+        public void SaveGame()
+        {
+            var data = new SaveData();
+
+            foreach (HexTile tile in World.Grid.Tiles)
+            {
+                data.hexOwnership.Add(new SavedHexOwnership
+                {
+                    q = tile.Coordinate.Q,
+                    r = tile.Coordinate.R,
+                    owner = tile.Owner.ToString(),
+                });
+            }
+
+            foreach (Site site in World.Sites)
+            {
+                if (site.State == SiteState.Destroyed)
+                    continue;
+
+                data.sites.Add(new SavedSite
+                {
+                    type = site.Type.ToString(),
+                    owner = site.Owner.ToString(),
+                    q = site.Location.Q,
+                    r = site.Location.R,
+                    state = site.State.ToString(),
+                    turnsRemaining = site.TurnsRemaining,
+                    healthFraction01 = site.HealthFraction01,
+                });
+            }
+
+            foreach (DronePlan plan in PlayerPlans)
+                data.plans.Add(new SavedPlan { name = plan.Name, category = plan.Category.ToString() });
+
+            foreach (KeyValuePair<DronePlan, int> entry in PlayerInventory)
+                data.inventory.Add(new SavedInventoryEntry { planName = entry.Key.Name, count = entry.Value });
+
+            SaveSystem.Save(data);
+        }
+
+        /// <summary>Loads and applies a save, if one exists. Returns false (no-op) if there's no save file.</summary>
+        public bool LoadGame()
+        {
+            if (!SaveSystem.HasSave())
+                return false;
+
+            ApplySaveData(SaveSystem.Load());
+            return true;
+        }
+
+        private void ApplySaveData(SaveData data)
+        {
+            foreach (SavedHexOwnership saved in data.hexOwnership)
+            {
+                HexTile tile = World.Grid.GetTile(new HexCoordinate(saved.q, saved.r));
+                if (tile != null && Enum.TryParse(saved.owner, out TheatreFaction owner))
+                    tile.Owner = owner;
+            }
+
+            foreach (SiteMarkerView marker in _siteViews)
+            {
+                if (marker != null)
+                    DestroyImmediate(marker.gameObject);
+            }
+            _siteViews.Clear();
+            World.Sites.Clear();
+            _productionQueues.Clear();
+
+            foreach (SavedSite saved in data.sites)
+            {
+                if (!Enum.TryParse(saved.type, out SiteType type) || !Enum.TryParse(saved.owner, out TheatreFaction owner) || !Enum.TryParse(saved.state, out SiteState state))
+                    continue;
+
+                Site site = Site.Restore(type, owner, new HexCoordinate(saved.q, saved.r), state, saved.turnsRemaining, saved.healthFraction01);
+                World.Sites.Add(site);
+                CreateSiteMarker(site);
+            }
+
+            PlayerPlans.Clear();
+            foreach (SavedPlan saved in data.plans)
+            {
+                if (!Enum.TryParse(saved.category, out UnitCategory category))
+                    continue;
+
+                Color accent = PlanAccentPalette[PlayerPlans.Count % PlanAccentPalette.Length];
+                PlayerPlans.Add(new DronePlan(saved.name, category, accent));
+            }
+
+            PlayerInventory.Clear();
+            foreach (SavedInventoryEntry saved in data.inventory)
+            {
+                DronePlan plan = PlayerPlans.FirstOrDefault(p => p.Name == saved.planName);
+                if (plan != null)
+                    PlayerInventory[plan] = saved.count;
+            }
+
+            SelectedTile = null;
+            RefreshShowcaseForSelection();
+            RefreshAllViews();
+        }
+
+        /// <summary>Tears down the whole map and rebuilds it fresh — the "New Game" menu action.</summary>
+        public void NewGame()
+        {
+            var children = new List<GameObject>();
+            foreach (Transform child in transform)
+                children.Add(child.gameObject);
+            foreach (GameObject child in children)
+                DestroyImmediate(child);
+
+            _tileViews.Clear();
+            _siteViews.Clear();
+            _productionQueues.Clear();
+            PlayerPlans.Clear();
+            PlayerInventory.Clear();
+            SelectedTile = null;
+            _showcaseAnchor = null;
+
+            Build();
         }
 
         private void OnGUI()

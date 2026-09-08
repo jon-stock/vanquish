@@ -739,6 +739,14 @@ all turn-based, feeding into and out of combat instances.
       deserves its own pass rather than being bolted on. `Site`'s `ApplyDamage`/
       `Destroyed` state is the ready-made hook for "base destroyed kills its
       operators" once personnel exists.
+- [~] **Save/Load**: a real save system now exists (`Core/SaveData.cs`/
+      `SaveSystem.cs`, JSON via `JsonUtility`, `Site.Restore(...)` for exact site
+      reconstruction), reachable via an Escape pause menu (`GameMenuController`: Save,
+      Load, New Game, Quit). Saves exactly the four things asked for: tile ownership,
+      which sites are on which tile (full state, not just "it exists"), designed
+      Plans, and produced inventory. **Not yet saved**: turn number, resource pool,
+      in-progress production queues, victory-condition sustain-counters, or camera
+      position — deliberately out of the requested scope for this pass.
 
 **Note on scope across this phase's passes:** same approach as Phases 0/1 — built the
 pure logic/data foundations (hex grid, sites, movement, turn resolution, victory

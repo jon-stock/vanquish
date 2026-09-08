@@ -14,6 +14,15 @@ namespace Vanquish.Theatre.Play
     {
         public Vector3 focusPoint;
 
+        /// <summary>
+        /// Set by whoever builds this camera to a check like harness.IsPointerOverUI
+        /// — clicking/dragging/scrolling while the cursor is over an OnGUI panel
+        /// (e.g. clicking a "Build" button) must NOT also pan/orbit/zoom the map or
+        /// reach through to world-space hex selection underneath it. Optional (null
+        /// means "never over UI").
+        /// </summary>
+        public System.Func<bool> isPointerOverUI;
+
         public float panSpeed = 14f;
 
         [Tooltip("Left-click-drag pan speed, scaled by current zoom distance so a drag covers the same apparent screen distance at any zoom level.")]
@@ -80,9 +89,11 @@ namespace Vanquish.Theatre.Play
         /// direction as WASD, scaled by current zoom distance so a given screen-space
         /// drag covers the same apparent distance whether zoomed in or out.
         /// </summary>
+        private bool IsPointerOverUI() => isPointerOverUI != null && isPointerOverUI();
+
         private void HandleLeftDragPan()
         {
-            if (!Input.GetMouseButton(0))
+            if (!Input.GetMouseButton(0) || IsPointerOverUI())
                 return;
 
             float deltaX = Input.GetAxis("Mouse X");
@@ -102,7 +113,7 @@ namespace Vanquish.Theatre.Play
 
         private void HandleOrbit()
         {
-            if (!Input.GetMouseButton(1))
+            if (!Input.GetMouseButton(1) || IsPointerOverUI())
                 return;
 
             float deltaX = Input.GetAxis("Mouse X");
@@ -113,7 +124,7 @@ namespace Vanquish.Theatre.Play
 
         private void HandleZoom()
         {
-            float scroll = Input.GetAxis("Mouse ScrollWheel");
+            float scroll = IsPointerOverUI() ? 0f : Input.GetAxis("Mouse ScrollWheel");
             if (Mathf.Abs(scroll) > 0.0001f)
                 _targetDistance = Mathf.Clamp(_targetDistance - scroll * zoomSensitivity * 10f, minDistance, maxDistance);
 

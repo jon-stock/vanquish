@@ -4,6 +4,7 @@ using UnityEditor;
 using UnityEngine;
 using Vanquish.Combat;
 using Vanquish.Combat.Play;
+using Vanquish.Core;
 using Vanquish.Data;
 using Vanquish.Data.Support;
 using Vanquish.Simulation.Damage;
@@ -65,6 +66,8 @@ namespace Vanquish.EditorTools
             TestTheatreMapHarnessBuildsAClickableMap();
             TestTheatreMapHarnessBuildMenu();
             TestTheatreMapHarnessLabAndFactoryProduction();
+            TestTheatreMapHarnessSaveLoadRoundTrip();
+            TestTheatreMapHarnessPointerOverUIDoesNotThrow();
 
             if (_failures > 0)
             {
@@ -980,6 +983,97 @@ namespace Vanquish.EditorTools
                 harness.SelectTile(labHex);
                 Expect(harness.SelectedFactory() == null, "A Lab hex should not resolve as a factory");
                 Expect(!harness.TryQueueProduction(falcon), "Queuing production without a selected factory should fail");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(harnessGo);
+            }
+        }
+
+        private static void TestTheatreMapHarnessSaveLoadRoundTrip()
+        {
+            var harnessGo = new GameObject("SmokeTest_TheatreMapHarness_SaveLoad");
+            try
+            {
+                var harness = harnessGo.AddComponent<TheatreMapHarness>();
+                harness.Build();
+
+                // --- Build up some state worth round-tripping ---
+                HexTile capturedHex = harness.World.Grid.Tiles.First(t => t.Owner == TheatreFaction.Enemy &&
+                    harness.World.Grid.NeighborsOf(t.Coordinate).Any(n => n.Owner == TheatreFaction.Player));
+                harness.SelectTile(capturedHex);
+                Expect(harness.TryCaptureSelectedTile(), "Setup: capturing a front-line hex should succeed");
+                HexCoordinate capturedCoord = capturedHex.Coordinate;
+
+                HexTile labHex = harness.World.Grid.Tiles.First(t =>
+                    t.Owner == TheatreFaction.Player && t.Terrain == TerrainType.Open && !harness.HasActiveSite(t.Coordinate));
+                HexCoordinate labCoord = labHex.Coordinate;
+                harness.SelectTile(labHex);
+                Expect(harness.TryBeginConstructionOnSelectedTile(SiteType.Lab, 1), "Setup: should be able to start building a Lab");
+                harness.AdvanceTurn();
+                harness.SelectTile(labHex);
+                Expect(harness.CanDesignPlanAtSelectedTile(), "Setup: Lab should be operational");
+                Expect(harness.TryCreatePlan("Falcon", UnitCategory.Quadcopter, out _), "Setup: designing 'Falcon' should succeed");
+
+                Site playerFactory = harness.World.Sites.First(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.Factory);
+                harness.SelectTile(harness.World.Grid.GetTile(playerFactory.Location));
+                DronePlan falcon = harness.PlayerPlans[0];
+                Expect(harness.TryQueueProduction(falcon), "Setup: queuing Falcon production should succeed");
+                int turns = TheatreMapHarness.TurnsToProduce(UnitCategory.Quadcopter);
+                for (int i = 0; i < turns; i++)
+                    harness.AdvanceTurn();
+                Expect(harness.PlayerInventory.TryGetValue(falcon, out int producedBefore) && producedBefore == 1, "Setup: Falcon production should have completed");
+
+                // --- Save, reset to a brand new game, then load back ---
+                harness.SaveGame();
+                harness.NewGame();
+
+                Expect(harness.World.Grid.GetTile(capturedCoord).Owner == TheatreFaction.Enemy, "New game should reset the captured hex back to its default owner");
+                Expect(harness.PlayerPlans.Count == 0, "New game should clear designed plans");
+
+                Expect(harness.LoadGame(), "LoadGame should succeed since a save was just written");
+
+                Expect(harness.World.Grid.GetTile(capturedCoord).Owner == TheatreFaction.Player, "Loaded game should restore the captured hex's ownership");
+
+                Site loadedLab = harness.World.Sites.FirstOrDefault(s => s.Location.Equals(labCoord) && s.Type == SiteType.Lab);
+                Expect(loadedLab != null, "Loaded game should restore the built Lab");
+                Expect(loadedLab != null && loadedLab.IsOperational, "Loaded Lab should be restored as Operational");
+
+                Expect(harness.PlayerPlans.Count == 1 && harness.PlayerPlans[0].Name == "Falcon", "Loaded game should restore the designed plan");
+                Expect(harness.PlayerPlans[0].Category == UnitCategory.Quadcopter, "Loaded plan should restore its category");
+
+                DronePlan loadedFalcon = harness.PlayerPlans[0];
+                Expect(harness.PlayerInventory.TryGetValue(loadedFalcon, out int producedAfter) && producedAfter == 1,
+                    "Loaded game should restore the produced inventory count");
+
+                Site loadedFactory = harness.World.Sites.FirstOrDefault(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.Factory);
+                Expect(loadedFactory != null && loadedFactory.IsOperational, "Loaded game should restore the seeded Player factory");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(harnessGo);
+                SaveSystem.DeleteSave(); // don't leave a stray save file behind for a human tester to trip over
+            }
+        }
+
+        private static void TestTheatreMapHarnessPointerOverUIDoesNotThrow()
+        {
+            var harnessGo = new GameObject("SmokeTest_TheatreMapHarness_PointerOverUI");
+            try
+            {
+                var harness = harnessGo.AddComponent<TheatreMapHarness>();
+                harness.Build();
+
+                // Regression coverage for "focus goes when I click build": the pointer-
+                // over-UI check must exist and be callable (wired into both the
+                // harness's own click handling and the camera controller), and must
+                // reflect the menu's open/closed state via the delegate chain.
+                bool overUiWhenClosed = harness.IsPointerOverUI();
+                Expect(!overUiWhenClosed, "At the harness's own HUD-panel-relative default mouse position in a headless run, IsPointerOverUI should be false (menu closed, and (0,0) is outside the corner panel)");
+
+                var cameraController = harnessGo.GetComponentInChildren<TheatreMapCameraController>();
+                Expect(cameraController != null && cameraController.isPointerOverUI != null,
+                    "Camera controller should have its isPointerOverUI delegate wired up by the harness");
             }
             finally
             {

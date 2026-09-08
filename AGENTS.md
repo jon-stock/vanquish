@@ -120,6 +120,19 @@ also appears next to whichever Factory is selected, showing what it's building.
 Tech research at a Lab is not implemented yet (a placeholder note says so in the
 panel) — see PLAN.md for what's deferred.
 
+**Escape** opens a pause menu (`GameMenuController`): Save Game, Load Game, New Game
+(wipes and rebuilds the map fresh), and Quit. Save/Load round-trip exactly the four
+things asked for — tile ownership, which sites are on which tile (type/owner/state/
+turns-remaining/health), designed Plans, and produced inventory — via `Core/
+SaveData.cs`/`SaveSystem.cs` (JSON, `Site.Restore(...)` reconstructs a site directly
+into its saved state). Turn number, resource pool, and in-progress production queues
+are deliberately not saved yet (out of the requested scope for this pass).
+
+Clicking a button in the corner panel or the pause menu no longer "reaches through"
+to the 3D scene underneath (the previously-reported focus/selection bug) —
+`TheatreMapHarness.IsPointerOverUI()` gates both the harness's own hex-click handling
+and `TheatreMapCameraController`'s pan/orbit/zoom.
+
 Regenerate via `Vanquish.EditorTools.SceneBuilder.BuildPhase2TheatreMapScene`.
 `TheatreMapHarness.Build()` is exercised directly by `SmokeTest` (grid/site counts,
 capture eligibility logic on both a front-line and a deep-territory hex, turn

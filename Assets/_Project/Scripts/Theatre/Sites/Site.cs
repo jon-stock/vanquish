@@ -40,6 +40,22 @@ namespace Vanquish.Theatre
             return site;
         }
 
+        /// <summary>
+        /// Reconstructs a site directly into an arbitrary saved state (save/load —
+        /// see <c>Core.SaveData</c>/<c>SavedSite</c>), bypassing the normal
+        /// construction/repair/relocation entry points since a loaded save already
+        /// knows exactly what state each site was in.
+        /// </summary>
+        public static Site Restore(SiteType type, TheatreFaction owner, HexCoordinate location, SiteState state, int turnsRemaining, float healthFraction01)
+        {
+            return new Site(type, owner, location)
+            {
+                State = state,
+                TurnsRemaining = turnsRemaining,
+                HealthFraction01 = healthFraction01,
+            };
+        }
+
         /// <summary>Advance one turn of whatever this site is currently doing (build/repair/relocate). No-op if Operational or Destroyed.</summary>
         public void Tick()
         {
