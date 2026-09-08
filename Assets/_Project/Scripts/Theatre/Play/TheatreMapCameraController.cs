@@ -35,7 +35,7 @@ namespace Vanquish.Theatre.Play
         public float zoomSensitivity = 2f;
         public float zoomSmoothing = 8f;
         public float minDistance = 6f;
-        public float maxDistance = 34f;
+        public float maxDistance = 60f;
 
         private float _yaw;
         private float _pitch;

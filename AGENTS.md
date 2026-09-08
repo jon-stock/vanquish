@@ -119,11 +119,12 @@ Assets/_Project/Scenes/Phase2_TheatreMap.unity
 Assets/_Project/Scripts/Theatre/Play/*
 ```
 
-Open that scene and press Play for a real, visible hex-grid theatre map: a 9x7 patch
+Open that scene and press Play for a real, visible hex-grid theatre map: a 10x10 patch
 of procedurally-meshed hexes (`HexMeshFactory` — no imported art, same convention as
-the drone visuals), colored by terrain (open/road/mountain, mountains rendered
-taller) and by owner (blue Player / red Enemy), with a road cutting across the middle
-and a couple of mountain flanks for terrain variety. Two factories and two bases per
+the drone visuals), 50 hexes per side, colored by terrain (open/road/mountain,
+mountains rendered taller) and by owner (blue Player / red Enemy), with a road cutting
+across the middle and a couple of mountain flanks for terrain variety. Two factories
+and two bases per
 side are rendered as simple colored markers. WASD or left-click-drag pans the camera,
 right-click-drag orbits/rotates it, scroll zooms (smoothly — eases toward the target
 distance rather than snapping), and clicking a hex without dragging selects it (shows

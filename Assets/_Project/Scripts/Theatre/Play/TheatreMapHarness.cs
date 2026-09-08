@@ -26,8 +26,9 @@ namespace Vanquish.Theatre.Play
     /// </summary>
     public class TheatreMapHarness : MonoBehaviour
     {
-        private const int Columns = 9;
-        private const int Rows = 7;
+        // 10x10 = 100 hexes, split 5 columns (50 hexes) per side.
+        private const int Columns = 10;
+        private const int Rows = 10;
         private const float HexRadius = 1f;
 
         // Tall enough relative to HexRadius to read as a solid block/tile with a
@@ -226,7 +227,7 @@ namespace Vanquish.Theatre.Play
             cameraGo.tag = "MainCamera";
             cameraGo.AddComponent<Camera>();
             cameraGo.AddComponent<AudioListener>();
-            cameraGo.transform.position = gridCenter + new Vector3(0f, 16f, -10f);
+            cameraGo.transform.position = gridCenter + new Vector3(0f, 26f, -16f);
             cameraGo.transform.LookAt(gridCenter);
 
             var cameraController = cameraGo.AddComponent<TheatreMapCameraController>();

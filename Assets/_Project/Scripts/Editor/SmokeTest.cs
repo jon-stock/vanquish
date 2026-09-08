@@ -811,12 +811,12 @@ namespace Vanquish.EditorTools
                 var harness = harnessGo.AddComponent<TheatreMapHarness>();
                 harness.Build();
 
-                Expect(harness.World.Grid.Tiles.Count == 63, $"Map should be a 9x7 = 63 hex grid, got {harness.World.Grid.Tiles.Count}");
+                Expect(harness.World.Grid.Tiles.Count == 100, $"Map should be a 10x10 = 100 hex grid, got {harness.World.Grid.Tiles.Count}");
 
                 int playerHexes = harness.World.Grid.CountOwnedBy(TheatreFaction.Player);
                 int enemyHexes = harness.World.Grid.CountOwnedBy(TheatreFaction.Enemy);
-                Expect(playerHexes == 28, $"Player should own 4 of 9 columns * 7 rows = 28 hexes, got {playerHexes}");
-                Expect(enemyHexes == 35, $"Enemy should own 5 of 9 columns * 7 rows = 35 hexes, got {enemyHexes}");
+                Expect(playerHexes == 50, $"Player should own 5 of 10 columns * 10 rows = 50 hexes, got {playerHexes}");
+                Expect(enemyHexes == 50, $"Enemy should own 5 of 10 columns * 10 rows = 50 hexes, got {enemyHexes}");
 
                 Expect(harness.World.Sites.Count == 4, $"Should have 4 sites (factory+base per side), got {harness.World.Sites.Count}");
                 Expect(harness.World.Sites.Any(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.Factory && s.IsOperational), "Player factory should exist and be operational");
@@ -830,7 +830,7 @@ namespace Vanquish.EditorTools
                     "Camera controller's focus point should be set to the grid center, not left at the default zero");
 
                 var tileViewCount = harnessGo.GetComponentsInChildren<HexTileView>().Length;
-                Expect(tileViewCount == 63, $"Should create one HexTileView per hex, got {tileViewCount}");
+                Expect(tileViewCount == 100, $"Should create one HexTileView per hex, got {tileViewCount}");
                 var siteViewCount = harnessGo.GetComponentsInChildren<SiteMarkerView>().Length;
                 Expect(siteViewCount == 4, $"Should create one SiteMarkerView per site, got {siteViewCount}");
 
