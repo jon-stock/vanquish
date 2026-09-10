@@ -77,7 +77,10 @@ namespace Vanquish.Theatre.Play
                 return;
 
             Rect panelRect = PanelRect;
+            Color previousBoxColor = GUI.color;
+            GUI.color = new Color(0.102f, 0.114f, 0.141f, 0.97f); // dark slate (~#1A1D24), evoking the blueprint/HUD look without a full UI Toolkit rebuild
             GUI.Box(panelRect, GUIContent.none);
+            GUI.color = previousBoxColor;
 
             const float pad = 12f;
             const float closeButtonSize = 26f;
@@ -125,7 +128,7 @@ namespace Vanquish.Theatre.Play
         {
             bool selected = _group == group;
             Color previousColor = GUI.color;
-            GUI.color = selected ? new Color(0.35f, 0.55f, 0.75f) : new Color(0.5f, 0.5f, 0.5f);
+            GUI.color = selected ? new Color(0.2f, 0.6f, 0.7f) : new Color(0.4f, 0.4f, 0.45f);
             if (GUI.Button(rect, label))
             {
                 _group = group;
@@ -206,8 +209,8 @@ namespace Vanquish.Theatre.Play
 
                     bool sameColumn = prerequisite.Value.Column == node.Column;
                     Color lineColor = harness.IsTechUnlocked(node.Id)
-                        ? new Color(0.4f, 0.85f, 0.4f)
-                        : (sameColumn ? new Color(0.6f, 0.6f, 0.65f) : new Color(0.55f, 0.75f, 0.9f));
+                        ? new Color(0.3f, 0.85f, 0.95f) // cyan — unlocked
+                        : (sameColumn ? new Color(0.55f, 0.55f, 0.62f) : new Color(0.85f, 0.65f, 0.35f)); // gray same-column, gold cross-column
 
                     DrawElbowConnector(prereqBottom, nodeTop, lineColor, sameColumn ? 2f : 2f);
                 }
@@ -220,7 +223,11 @@ namespace Vanquish.Theatre.Play
             bool unlocked = harness.IsTechUnlocked(node.Id);
             bool prereqsMet = ArePrerequisitesMet(node);
 
-            Color boxColor = unlocked ? new Color(0.35f, 0.55f, 0.35f) : (prereqsMet ? new Color(0.3f, 0.35f, 0.45f) : new Color(0.22f, 0.22f, 0.26f));
+            Color boxColor = unlocked
+                ? new Color(0.16f, 0.45f, 0.5f)    // cyan — unlocked
+                : prereqsMet
+                    ? new Color(0.32f, 0.24f, 0.42f) // purple — affordable/researchable now
+                    : new Color(0.16f, 0.17f, 0.2f); // dark slate — locked
             Color previousColor = GUI.color;
             GUI.color = boxColor;
             GUI.Box(rect, GUIContent.none);
