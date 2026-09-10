@@ -100,7 +100,7 @@ namespace Vanquish.Theatre.Play
             }
         }
 
-        /// <summary>Payload capacity, in kg (a drone's mountable-munition capacity, or a missile's own warhead payload).</summary>
+        /// <summary>Payload capacity, in kg (a drone's total mountable-munition mass budget, or a missile's own warhead payload).</summary>
         public float PayloadKg
         {
             get
@@ -111,5 +111,22 @@ namespace Vanquish.Theatre.Play
                 return (Propeller?.PayloadKg ?? 0f) + (Battery?.PayloadKg ?? 0f);
             }
         }
+
+        /// <summary>
+        /// Maximum number of missiles one drone of this Plan can physically carry —
+        /// a fixed hardpoint/pylon-count cap, deliberately independent of
+        /// <see cref="PayloadKg"/>/mass (a real airframe can only fit so many
+        /// physical mounting points regardless of how light the missiles are).
+        /// Mirrors the airframe's rotor count: a Hexacopter's larger frame has more
+        /// room for pylons than a Quadcopter's. Not applicable to a Missile Plan
+        /// itself (0) — see <see cref="Army.MissileCapacity"/> for how this caps an
+        /// army's total pooled missile count.
+        /// </summary>
+        public int MissilePylons => Category switch
+        {
+            UnitCategory.Quadcopter => 4,
+            UnitCategory.Hexacopter => 6,
+            _ => 0,
+        };
     }
 }

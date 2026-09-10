@@ -782,10 +782,17 @@ all turn-based, feeding into and out of combat instances.
       optional `bladeColor`/`bladeSizeMultiplier`/`batteryColor`/
       `batterySizeMultiplier` parameters (real combat-instance drones, which have no
       Plan, simply omit them and get the old defaults), and `PlanPreviewBuilder`'s
-      missile preview is now nose (tinted by Warhead) + body (length/color from
-      Propulsion) + optional tail fins (tinted by Guidance, omitted for an unguided
-      design) instead of one plain capsule — so two Plans that only differ by parts
-      now look different everywhere their icon appears, which is also why
+      missile preview is now a from-scratch procedural missile
+      (`MissileVisualBuilder`) rather than one plain accent-colored capsule: a real
+      triangulated nose-cone mesh (tinted by Warhead — Unity has no built-in cone
+      primitive, so this generates one directly), a cylindrical body (length/color
+      from Propulsion), tail fins (tinted by Guidance, omitted for an unguided
+      design), and propulsion-specific tail/intake detail — a solid rocket gets a
+      plain tapered nozzle; a dual-pulse motor adds a stage-separator ring; a ramjet
+      adds a boxy underside intake scoop with a darker recessed "mouth" (so it reads
+      as hollow, not a solid block); a scramjet gets a bigger, sharper intake plus
+      stabilizing side strakes. Two Plans that only differ by parts now look
+      different everywhere their icon appears, which is also why
       `PlanIconRenderer`'s cache key now includes every part id. `DronePlan` is
       mutable (`ApplyDesign`) specifically so the Design window can edit an
       existing, already-referenced-elsewhere Plan (production queues/storage/army
@@ -801,7 +808,24 @@ all turn-based, feeding into and out of combat instances.
       unlocking a tech node still tracks progress only for the composite airframe/
       missile-evolution tiers (Hexacopter, MALE/HALE, CCA, etc.) — it doesn't yet
       grant any real bonus beyond what a design's own selected parts already give it
-      (the panel says so explicitly rather than silently ignoring it). Produced/stored inventory now
+      (the panel says so explicitly rather than silently ignoring it).
+
+      A drone Plan's payload budget (`DronePlan.PayloadKg`, from its Propeller +
+      Battery choices) is deliberately rebalanced to scale meaningfully across
+      tiers (baseline ~1.0kg up to ~4.8kg for the best Propeller+Battery
+      combination — was a nearly-flat 1.0-1.8kg range before) — but a drone's
+      **missile count** is capped separately from that mass/payload budget, not
+      derived from it: `DronePlan.MissilePylons` is a fixed hardpoint-count cap per
+      airframe category (Quadcopter 4, Hexacopter 6, mirroring their rotor counts),
+      and `Army.MissileCapacity` sums `MissilePylons * count` across every drone in
+      an army's composition. `TheatreMapHarness.TryDeployArmy`/`TryRestockArmy`/
+      `TryTransferUnits` all reject an operation that would push an army's total
+      missile count above that pylon capacity, regardless of how light the
+      missiles themselves are — modeling "only so many physical mounting points
+      fit on an airframe," not a mass limit. The Design window's stats panel, the
+      Airfield's staged-deployment card, and the army info bar all show the
+      relevant pylon-capacity numbers so this cap is visible before an action is
+      attempted, not just a silent rejection. Produced/stored inventory now
       does feed into a real `Combat.Stockpile` once deployed into an army and moved
       into a fight — see the site-storage/field-army item below. **Personnel system**
       (hireable operators, rank, permadeath) / **Base destruction consequence** /

@@ -1019,6 +1019,19 @@ namespace Vanquish.Theatre.Play
         /// <paramref name="error"/>) if the site isn't an eligible Airfield, nothing
         /// was selected, or the selection exceeds what's actually stored there.
         /// </summary>
+        /// <summary>Shared pylon-capacity check for <see cref="TryDeployArmy"/>/<see cref="TryRestockArmy"/>/<see cref="TryTransferUnits"/> — see <see cref="Army.MissileCapacity"/>.</summary>
+        private static bool TryValidateMissilePylonCapacity(int droneMissileCapacity, int missileCount, out string error)
+        {
+            if (missileCount > droneMissileCapacity)
+            {
+                error = $"Not enough pylon capacity: the selected drones can carry {droneMissileCapacity} missile(s), but {missileCount} would be assigned.";
+                return false;
+            }
+
+            error = null;
+            return true;
+        }
+
         public bool TryDeployArmy(Site airfield, IReadOnlyDictionary<DronePlan, int> selection, out string error)
         {
             if (airfield == null || airfield.Owner != TheatreFaction.Player || !airfield.IsOperational || !SiteStorageCatalog.CanDeployArmies(airfield.Type))
@@ -1046,6 +1059,10 @@ namespace Vanquish.Theatre.Play
                     return false;
                 }
             }
+
+            if (!TryValidateMissilePylonCapacity(selection.Where(kv => kv.Key.Category != UnitCategory.Missile).Sum(kv => kv.Key.MissilePylons * kv.Value),
+                    selection.Where(kv => kv.Key.Category == UnitCategory.Missile).Sum(kv => kv.Value), out error))
+                return false;
 
             var army = new Army(TheatreFaction.Player, airfield.Location);
             foreach (KeyValuePair<DronePlan, int> entry in selection)
@@ -1126,6 +1143,10 @@ namespace Vanquish.Theatre.Play
                 error = "Armies must be on the same hex to transfer units.";
                 return false;
             }
+            if (plan.Category == UnitCategory.Missile &&
+                !TryValidateMissilePylonCapacity(to.MissileCapacity, to.MissileCount + amount, out error))
+                return false;
+
             if (!from.TryRemoveUnits(plan, amount))
             {
                 error = $"{from.Name} doesn't have {amount} {plan.Name} to send.";
@@ -1172,6 +1193,11 @@ namespace Vanquish.Theatre.Play
                     return false;
                 }
             }
+
+            int resultingCapacity = army.MissileCapacity + selection.Where(kv => kv.Key.Category != UnitCategory.Missile).Sum(kv => kv.Key.MissilePylons * kv.Value);
+            int resultingMissiles = army.MissileCount + selection.Where(kv => kv.Key.Category == UnitCategory.Missile).Sum(kv => kv.Value);
+            if (!TryValidateMissilePylonCapacity(resultingCapacity, resultingMissiles, out error))
+                return false;
 
             foreach (KeyValuePair<DronePlan, int> entry in selection)
             {
@@ -2183,6 +2209,10 @@ namespace Vanquish.Theatre.Play
                 {
                     foreach (KeyValuePair<DronePlan, int> kv in staged)
                         GUILayout.Label($"{kv.Key.Name} x{kv.Value}");
+
+                    int stagedCapacity = staged.Where(kv => kv.Key.Category != UnitCategory.Missile).Sum(kv => kv.Key.MissilePylons * kv.Value);
+                    int stagedMissiles = staged.Where(kv => kv.Key.Category == UnitCategory.Missile).Sum(kv => kv.Value);
+                    GUILayout.Label($"Pylon capacity: {stagedMissiles}/{stagedCapacity}", Italic());
                 }
 
                 GUILayout.FlexibleSpace();
@@ -2266,7 +2296,7 @@ namespace Vanquish.Theatre.Play
             DrawRankBadge(army.Rank);
             GUILayout.FlexibleSpace();
             string effective = army.IsCombatEffective ? "Combat effective" : "Not combat effective — needs drones and missiles";
-            GUILayout.Label($"{army.Owner} — {effective}", Italic());
+            GUILayout.Label($"{army.Owner} — {effective} — Missiles {army.MissileCount}/{army.MissileCapacity} pylons", Italic());
             GUILayout.EndHorizontal();
 
             Site standingSite = SiteAt(army.Location);

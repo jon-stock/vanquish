@@ -68,24 +68,24 @@ namespace Vanquish.Theatre.Play
         {
             new PlanPartOption("prop_oversized_props", "Oversized Molded Propellers", "Baseline lift. Cheap and bulky.", "prop_oversized_props",
                 weightKg: 0.30f, speedKph: 70f, rangeKm: 6f, payloadKg: 1.0f, visualColor: new Color(0.82f, 0.82f, 0.8f), visualSizeMultiplier: 1.0f),
-            new PlanPartOption("prop_carbon_blades", "Balanced Carbon Fiber Blades", "Lighter and more efficient.", "prop_carbon_blades",
-                weightKg: 0.18f, speedKph: 85f, rangeKm: 8f, payloadKg: 1.0f, visualColor: new Color(0.05f, 0.05f, 0.06f), visualSizeMultiplier: 1.0f),
-            new PlanPartOption("prop_variable_pitch", "Variable-Pitch Propeller Hubs", "Finer thrust control, better range.", "prop_variable_pitch",
-                weightKg: 0.30f, speedKph: 95f, rangeKm: 11f, payloadKg: 1.3f, visualColor: new Color(0.16f, 0.16f, 0.18f), visualSizeMultiplier: 1.15f),
-            new PlanPartOption("prop_low_rcs_rotors", "Low-RCS Composite Rotors", "Radar-attenuating, stealthier flight.", "prop_low_rcs_rotors",
-                weightKg: 0.25f, speedKph: 100f, rangeKm: 13f, payloadKg: 1.2f, visualColor: new Color(0.02f, 0.02f, 0.025f), visualSizeMultiplier: 1.1f),
+            new PlanPartOption("prop_carbon_blades", "Balanced Carbon Fiber Blades", "Lighter, more efficient, noticeably more lift.", "prop_carbon_blades",
+                weightKg: 0.18f, speedKph: 85f, rangeKm: 8f, payloadKg: 1.8f, visualColor: new Color(0.05f, 0.05f, 0.06f), visualSizeMultiplier: 1.0f),
+            new PlanPartOption("prop_variable_pitch", "Variable-Pitch Propeller Hubs", "Finer thrust control, best lift of any propeller.", "prop_variable_pitch",
+                weightKg: 0.30f, speedKph: 95f, rangeKm: 11f, payloadKg: 3.0f, visualColor: new Color(0.16f, 0.16f, 0.18f), visualSizeMultiplier: 1.15f),
+            new PlanPartOption("prop_low_rcs_rotors", "Low-RCS Composite Rotors", "Radar-attenuating; slightly less lift for the stealth shaping.", "prop_low_rcs_rotors",
+                weightKg: 0.25f, speedKph: 100f, rangeKm: 13f, payloadKg: 2.6f, visualColor: new Color(0.02f, 0.02f, 0.025f), visualSizeMultiplier: 1.1f),
         };
 
         public static readonly PlanPartOption[] Batteries =
         {
             new PlanPartOption("power_lipo_cells", "High-Capacity LiPo Cells", "Baseline power source.", "power_lipo_cells",
                 weightKg: 0.60f, speedKph: 0f, rangeKm: 8f, payloadKg: 0f, visualColor: new Color(0.07f, 0.07f, 0.08f), visualSizeMultiplier: 1.0f),
-            new PlanPartOption("power_lihv_packs", "High-Voltage LiHV Smart Packs", "More usable capacity.", "power_lihv_packs",
-                weightKg: 0.65f, speedKph: 3f, rangeKm: 13f, payloadKg: 0f, visualColor: new Color(0.05f, 0.06f, 0.1f), visualSizeMultiplier: 1.1f),
-            new PlanPartOption("power_solid_state", "Solid-State Lithium Batteries", "Denser, safer, longer endurance.", "power_solid_state",
-                weightKg: 0.45f, speedKph: 5f, rangeKm: 20f, payloadKg: 0.5f, visualColor: new Color(0.04f, 0.09f, 0.09f), visualSizeMultiplier: 0.9f),
-            new PlanPartOption("power_microturbine", "Micro-Turbine Auxiliary Power", "Hybrid power, extended range.", "power_microturbine",
-                weightKg: 1.10f, speedKph: 8f, rangeKm: 32f, payloadKg: 0f, visualColor: new Color(0.25f, 0.25f, 0.27f), visualSizeMultiplier: 1.4f),
+            new PlanPartOption("power_lihv_packs", "High-Voltage LiHV Smart Packs", "More usable capacity, frees up some payload budget.", "power_lihv_packs",
+                weightKg: 0.65f, speedKph: 3f, rangeKm: 13f, payloadKg: 0.8f, visualColor: new Color(0.05f, 0.06f, 0.1f), visualSizeMultiplier: 1.1f),
+            new PlanPartOption("power_solid_state", "Solid-State Lithium Batteries", "Denser, safer, longer endurance, and lighter for its capacity.", "power_solid_state",
+                weightKg: 0.45f, speedKph: 5f, rangeKm: 20f, payloadKg: 1.8f, visualColor: new Color(0.04f, 0.09f, 0.09f), visualSizeMultiplier: 0.9f),
+            new PlanPartOption("power_microturbine", "Micro-Turbine Auxiliary Power", "Hybrid power, extended range; the engine itself eats into payload gains.", "power_microturbine",
+                weightKg: 1.10f, speedKph: 8f, rangeKm: 32f, payloadKg: 1.2f, visualColor: new Color(0.25f, 0.25f, 0.27f), visualSizeMultiplier: 1.4f),
         };
 
         public static readonly PlanPartOption[] Warheads =
