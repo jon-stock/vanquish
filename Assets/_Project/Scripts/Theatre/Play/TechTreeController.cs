@@ -61,10 +61,18 @@ namespace Vanquish.Theatre.Play
 
         public void Open() => _isOpen = true;
 
-        private static readonly GUIStyle TitleStyle = new GUIStyle { fontStyle = FontStyle.Bold, fontSize = 14, normal = { textColor = Color.white } };
-        private static readonly GUIStyle ResearchStyle = new GUIStyle { fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleRight, normal = { textColor = Color.white } };
-        private static readonly GUIStyle DescriptionStyle = new GUIStyle { fontStyle = FontStyle.Italic, wordWrap = true, normal = { textColor = new Color(0.85f, 0.85f, 0.85f) } };
-        private static readonly GUIStyle ColumnHeaderStyle = new GUIStyle { fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperCenter, wordWrap = true, normal = { textColor = Color.white } };
+        // GUIStyle instances must not be constructed from a field initializer/
+        // constructor (Unity throws "set_fontStyle is not allowed to be called
+        // from a MonoBehaviour constructor" and — worse — a failed static
+        // initializer then re-throws on every subsequent access to this type,
+        // including from unrelated code like the camera's pointer-over-UI check,
+        // which is what caused the reported input lag). Built fresh in OnGUI
+        // instead, matching how the rest of this project's OnGUI code creates
+        // GUIStyles inline (see TheatreMapHarness.Bold()/Italic()).
+        private GUIStyle _titleStyle;
+        private GUIStyle _researchStyle;
+        private GUIStyle _descriptionStyle;
+        private GUIStyle _columnHeaderStyle;
 
         private const string DescriptionText =
             "Simple sub-component upgrades sit at the top of each column; unlocking one opens up the next. " +
@@ -75,6 +83,14 @@ namespace Vanquish.Theatre.Play
         {
             if (!_isOpen)
                 return;
+
+            if (_titleStyle == null)
+            {
+                _titleStyle = new GUIStyle { fontStyle = FontStyle.Bold, fontSize = 14, normal = { textColor = Color.white } };
+                _researchStyle = new GUIStyle { fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleRight, normal = { textColor = Color.white } };
+                _descriptionStyle = new GUIStyle { fontStyle = FontStyle.Italic, wordWrap = true, normal = { textColor = new Color(0.85f, 0.85f, 0.85f) } };
+                _columnHeaderStyle = new GUIStyle { fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperCenter, wordWrap = true, normal = { textColor = Color.white } };
+            }
 
             Rect panelRect = PanelRect;
             Color previousBoxColor = GUI.color;
@@ -87,10 +103,10 @@ namespace Vanquish.Theatre.Play
 
             var closeButtonRect = new Rect(panelRect.xMax - pad - closeButtonSize, panelRect.y + pad - 4f, closeButtonSize, closeButtonSize);
             var titleRect = new Rect(panelRect.x + pad, panelRect.y + pad - 4f, panelRect.width - pad * 2f - closeButtonSize - 8f, 22f);
-            GUI.Label(titleRect, "Tech Tree", TitleStyle);
+            GUI.Label(titleRect, "Tech Tree", _titleStyle);
 
             var researchRect = new Rect(panelRect.x + pad, panelRect.y + pad - 4f, panelRect.width - pad * 2f - closeButtonSize - 8f, 22f);
-            GUI.Label(researchRect, $"Research: {harness.Controller.ResearchPool[TheatreFaction.Player]}", ResearchStyle);
+            GUI.Label(researchRect, $"Research: {harness.Controller.ResearchPool[TheatreFaction.Player]}", _researchStyle);
 
             if (GUI.Button(closeButtonRect, "X"))
                 _isOpen = false;
@@ -105,9 +121,9 @@ namespace Vanquish.Theatre.Play
 
             float descY = tabsY + tabHeight + 6f;
             float descWidth = panelRect.width - pad * 2f;
-            float descHeight = DescriptionStyle.CalcHeight(new GUIContent(DescriptionText), descWidth);
+            float descHeight = _descriptionStyle.CalcHeight(new GUIContent(DescriptionText), descWidth);
             var descRect = new Rect(panelRect.x + pad, descY, descWidth, descHeight);
-            GUI.Label(descRect, DescriptionText, DescriptionStyle);
+            GUI.Label(descRect, DescriptionText, _descriptionStyle);
 
             float scrollY = descRect.yMax + 8f;
             var viewRect = new Rect(panelRect.x + pad, scrollY, panelRect.width - pad * 2f, panelRect.yMax - scrollY - pad);
@@ -184,7 +200,7 @@ namespace Vanquish.Theatre.Play
             for (int i = 0; i < columns.Length; i++)
             {
                 float x = CanvasPadding + i * (NodeWidth + ColumnGap);
-                GUI.Label(new Rect(x, CanvasPadding, NodeWidth, ColumnHeaderHeight), columns[i].ToUpperInvariant(), ColumnHeaderStyle);
+                GUI.Label(new Rect(x, CanvasPadding, NodeWidth, ColumnHeaderHeight), columns[i].ToUpperInvariant(), _columnHeaderStyle);
             }
         }
 
