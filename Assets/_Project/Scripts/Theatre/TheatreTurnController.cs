@@ -34,6 +34,16 @@ namespace Vanquish.Theatre
         /// <summary>Resource yield per Operational factory per turn (plain int for now — no currency/economy model exists yet).</summary>
         public int ResourcePerOperationalFactoryPerTurn = 10;
 
+        /// <summary>Per-faction research point pool, fed by Operational Labs each turn (see <see cref="TheatreTechCatalog"/>/<see cref="Play.TechTreeController"/>) — separate from <see cref="ResourcePool"/> since research spends against the tech tree, not production.</summary>
+        public Dictionary<TheatreFaction, int> ResearchPool { get; } = new Dictionary<TheatreFaction, int>
+        {
+            { TheatreFaction.Player, 0 },
+            { TheatreFaction.Enemy, 0 },
+        };
+
+        /// <summary>Research point yield per Operational Lab per turn.</summary>
+        public int ResearchPerOperationalLabPerTurn = 10;
+
         private readonly List<ITheatreVictoryCondition> _victoryConditions;
 
         public TheatreTurnController(TheatreWorldState world, IEnumerable<ITheatreVictoryCondition> victoryConditions)
@@ -67,8 +77,13 @@ namespace Vanquish.Theatre
         {
             foreach (Site site in World.Sites)
             {
-                if (site.Type == SiteType.Factory && site.IsOperational && site.Owner != TheatreFaction.Neutral)
+                if (site.Owner == TheatreFaction.Neutral || !site.IsOperational)
+                    continue;
+
+                if (site.Type == SiteType.Factory)
                     ResourcePool[site.Owner] += ResourcePerOperationalFactoryPerTurn;
+                else if (site.Type == SiteType.Lab)
+                    ResearchPool[site.Owner] += ResearchPerOperationalLabPerTurn;
             }
         }
 

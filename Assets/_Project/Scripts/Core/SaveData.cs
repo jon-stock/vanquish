@@ -40,6 +40,10 @@ namespace Vanquish.Core
         public int playerResource;
         public int enemyResource;
 
+        /// <summary>Per-faction research point pool (see TheatreTurnController.ResearchPool).</summary>
+        public int playerResearch;
+        public int enemyResearch;
+
         /// <summary>
         /// How many consecutive turns each faction has already sustained the
         /// territorial-control ownership threshold for (see
@@ -56,11 +60,20 @@ namespace Vanquish.Core
         /// <summary>Every Plan the player has designed at a Lab.</summary>
         public List<SavedPlan> plans = new List<SavedPlan>();
 
-        /// <summary>Completed-production counts per Plan (matched back up by name at load time).</summary>
+        /// <summary>Completed-production counts per Plan (matched back up by name at load time). Deprecated/unused since storage became site-scoped (see <see cref="siteStorage"/>) — kept only so old saves don't fail to parse; no longer written or applied.</summary>
         public List<SavedInventoryEntry> inventory = new List<SavedInventoryEntry>();
 
-        /// <summary>In-progress Factory production orders (matched back up by factory coordinate + plan name at load time) — without this, a save/load mid-production would silently lose queued builds.</summary>
+        /// <summary>In-progress Factory production orders (matched back up by factory/destination coordinate + plan name at load time) — without this, a save/load mid-production would silently lose queued builds.</summary>
         public List<SavedProductionOrder> productionOrders = new List<SavedProductionOrder>();
+
+        /// <summary>Every Airfield/Warehouse's stored drone/missile counts by Plan (matched back up by site coordinate + plan name at load time) — site-scoped storage capacity replaced the old global inventory pool.</summary>
+        public List<SavedSiteStorage> siteStorage = new List<SavedSiteStorage>();
+
+        /// <summary>Every deployed field army (see Theatre.Play.Army) — position, composition, and whether it's already moved this turn.</summary>
+        public List<SavedArmy> armies = new List<SavedArmy>();
+
+        /// <summary>Every in-progress inter-site logistics shipment (see Theatre.Play.TransferOrder) — without this, a save/load mid-transfer would silently lose stock that had already left its source site.</summary>
+        public List<SavedTransferOrder> transferOrders = new List<SavedTransferOrder>();
     }
 
     [Serializable]
@@ -104,6 +117,51 @@ namespace Vanquish.Core
         public int factoryR;
         public string planName;
         public int turnsRemaining;
+
+        /// <summary>Coordinate of the Airfield/Warehouse this order's finished output is delivered into.</summary>
+        public int destinationQ;
+        public int destinationR;
+    }
+
+    [Serializable]
+    public class SavedSiteStorage
+    {
+        public int siteQ;
+        public int siteR;
+        public string planName;
+        public int count;
+    }
+
+    [Serializable]
+    public class SavedTransferOrder
+    {
+        public int sourceQ;
+        public int sourceR;
+        public int destinationQ;
+        public int destinationR;
+        public string planName;
+        public int amount;
+        public int turnsRemaining;
+    }
+
+    [Serializable]
+    public class SavedArmyUnit
+    {
+        public string planName;
+        public int count;
+    }
+
+    [Serializable]
+    public class SavedArmy
+    {
+        public int id;
+        public string owner;
+        public int q;
+        public int r;
+        public bool hasMovedThisTurn;
+        public string name;
+        public int experience;
+        public List<SavedArmyUnit> units = new List<SavedArmyUnit>();
     }
 
     /// <summary>

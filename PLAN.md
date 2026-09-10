@@ -721,38 +721,110 @@ all turn-based, feeding into and out of combat instances.
       accent color) — names must be non-empty and unique. An **Operational Factory**
       then lists every designed Plan with a turn-costed "Build" button; queued
       `ProductionOrder`s tick down via the existing `AdvanceTurn` flow and land in a
-      simple player-wide `PlayerInventory` count once complete — no new turn-engine
+      Warehouse's site-scoped storage once complete (see the site-storage/field-army
+      item below for the full capacity/transfer model) — no new turn-engine
       code needed, this is pure UI/data layered on Phase 2's existing `Site`
-      lifecycle. Plans get an actual **3D preview model** next to whichever Lab/
-      Factory is selected (`PlanPreviewBuilder`, reusing `Combat/Play/
+      lifecycle. Plans get a real rendered **preview icon** right on their card,
+      wherever they appear (Lab/Factory/Warehouse/Airfield/army composition —
+      `PlanIconRenderer`, reusing `PlanPreviewBuilder`/`Combat/Play/
       DroneVisualBuilder` for quad/hex plans) — "shown what they look like," not just
-      named in a list, per direct request. **Not yet done**: this is still a POC
-      design system (name + category + color only) — not the full modular part-
-      composition design system the combat-instance side already has (real stats,
-      payload/hardness tradeoffs); tech research at a Lab (the panel says so
-      explicitly rather than silently ignoring it); and produced inventory doesn't
-      yet feed into an actual `Combat.Stockpile`/spawned unit anywhere — it's a
-      count, not yet connected to Phase 1's combat instances. **Personnel system**
+      named in a list, per direct request; an earlier version instead floated actual
+      3D models in world space next to the selected building, which read as unclear/
+      out of place. Each icon is now a small ring of pre-rendered rotation frames
+      (`PlanIconRenderer.RenderFrames`, transparent background via an ARGB32
+      render texture) rather than one static screenshot — `GetOrCreateIcon` picks
+      whichever frame matches the current time so the icon appears to spin in
+      place wherever it's drawn, without re-rendering the 3D preview every OnGUI
+      frame. An Operational, owned Lab also has a **Tech Tree** card that opens a
+      modal browser (`TechTreeController`) listing `TheatreTechCatalog`'s flat,
+      hardcoded node list (a placeholder catalog — no `Data.TechTree.TechNode`
+      ScriptableObject assets exist in this project yet) with prerequisite-gated
+      Unlock buttons, spending a per-faction research point pool
+      (`TheatreTurnController.ResearchPool`, fed 10/turn per Operational Lab —
+      `ResearchPerOperationalLabPerTurn`) and persisting unlocked node IDs via the
+      already-reserved `SaveData.unlockedTechNodeIds` slot. **Not yet done**: this
+      is still a POC design system (name + category + color only) — not the full
+      modular part-composition design system the combat-instance side already has
+      (real stats, payload/hardness tradeoffs); and unlocking a tech node tracks
+      progress only — it doesn't yet grant any real `PartDefinition`/unit bonus
+      (the panel says so explicitly rather than silently ignoring it). Produced/stored inventory now
+      does feed into a real `Combat.Stockpile` once deployed into an army and moved
+      into a fight — see the site-storage/field-army item below. **Personnel system**
       (hireable operators, rank, permadeath) / **Base destruction consequence** /
       theatre-level AI opponent remain fully deferred — personnel is a substantial
       system (hiring economy, rank progression, `SaveData` roster extension) that
       deserves its own pass rather than being bolted on. `Site`'s `ApplyDamage`/
       `Destroyed` state is the ready-made hook for "base destroyed kills its
       operators" once personnel exists.
+- [x] **Site storage capacity & field armies**: production no longer lands in an
+      unlimited global inventory — `SiteStorageCatalog` gives Airfields
+      (`SiteType.LaunchPlatform`) 50 drones/200 missiles of capacity and Warehouses
+      1000 drones/4000 missiles (Factories hold no stock of their own); queuing
+      production at a Factory (`TheatreMapHarness.TryQueueProduction`/
+      `EligibleProductionDestinations`) now always targets a Player-owned,
+      Operational Warehouse with room — never an Airfield directly — and a completed
+      order that finds its Warehouse full simply waits ("awaiting storage space")
+      rather than being discarded. Moving stock on from a Warehouse to an Airfield
+      (or any other Warehouse) is a separate logistics action: every stock card gets
+      a "Move" button that enters a destination-picking mode (every eligible
+      same-faction storage site with room highlights, same highlight system as army
+      moves), and clicking one queues a `Theatre/Play/TransferOrder`
+      (`TheatreMapHarness.TryBeginTransfer`/`EligibleTransferDestinations`) moving
+      that Plan's entire current stock — removed from the source immediately, always
+      landing at the destination exactly 1 turn later regardless of distance (no
+      travel-time-by-distance modeling), with in-progress transfers shown as their
+      own cards on both ends. Selecting an Operational Airfield shows a deploy
+      panel: choose how many of each stored drone/missile Plan to
+      commit and "Deploy Army" moves them into a brand-new field `Theatre/Play/
+      Army.cs` — army-level pooled drone/missile counts (no per-drone loadout), needs
+      at least one drone and one missile to be `IsCombatEffective` (only Airfields can
+      deploy, per design). Every army gets a random name (10 adjectives x 10 nouns =
+      100 combinations) and a cosmetic rank (`ArmyRank`: Private..General) that
+      advances with experience earned from combat wins, and renders as an actual
+      small flying drone (`ArmyMarkerView`, via `Combat/Play/DroneVisualBuilder`) with
+      a floating name/rank tag, directly clickable/selectable (no tile-then-list
+      detour needed) rather than an abstract token. Selecting a movable Player army
+      highlights its 6 neighboring hexes (`HexTileView.SetHighlighted`); clicking a
+      highlighted hex both selects the destination and issues the move/attack order
+      in one click (`TheatreMapHarness.TryMoveArmy`) — no directional buttons.  Moving
+      onto an empty hex not already owned by the mover captures it (same stand-in rule
+      as the "Capture this hex" button); moving onto a hostile army or hostile Site
+      instead resolves an actual combat instance via `Theatre/Play/
+      TheatreCombatResolver.cs`, which builds a real `Combat.EngagementController`/
+      `Stockpile`/`IObjective` (a `FactoryObjective`/`WarehouseObjective`/
+      `BaseObjective`/`ArmyObjective`, per target) from the army's/site's stats and
+      runs an AI strike loop to resolution headlessly (no live 3D scene) rather than a
+      full scene transition — a deliberate first pragmatic wiring, not the eventual
+      real feedback loop below. A small counter-rotating compass
+      (`TheatreMapHarness.DrawCompass`) always points to true north regardless of
+      camera orbit. **Known,
+      deliberate simplifications** (documented, not oversights): neither a defended
+      Site nor a defending Army has any active defensive fire of its own yet (no
+      theatre-level point-defense/garrison model — an army-vs-army fight is purely a
+      toughness/ammo race); Site types with no dedicated combat-instance objective yet
+      (Airfield/RadarInstallation/ReconStation/Lab) fall back to the generic
+      `BaseObjective` profile; and this headless resolution is still a stand-in for
+      the real "combat instance results writing back into theatre-map state" feedback
+      loop the item above already flags as deferred for player-fought engagements.
 - [x] **Save/Load**: a real save system now exists (`Core/SaveData.cs`/
       `SaveSystem.cs`, JSON via `JsonUtility`, `Site.Restore(...)` for exact site
       reconstruction), reachable via an Escape pause menu (`GameMenuController`: Save,
       Load, New Game, Quit). Now saves every piece of persistent theatre-map state:
       tile ownership, which sites are on which tile (full state, not just "it
-      exists"), designed Plans, produced inventory, the turn counter and result, the
+      exists"), designed Plans, each site's stored drone/missile counts
+      (`SavedSiteStorage`), every deployed army (`SavedArmy`/`SavedArmyUnit` —
+      position, composition, moved-this-turn flag), the turn counter and result, the
       per-faction resource pool, in-progress Factory production orders
-      (`SavedProductionOrder`), and the territorial-control victory condition's
-      sustain-turn counters (`TerritorialControlCondition.ConsecutiveTurnsMet`/
-      `RestoreConsecutiveTurns`) — turn number was flagged as a known gap and has
-      since been closed, and a follow-up audit for "anything else worth saving"
-      closed resource pool/production queues/sustain counters too. **Still not
-      saved, deliberately**: camera position and current hex selection (transient UI
-      state, not player progress).
+      (`SavedProductionOrder`, including each order's chosen destination Warehouse),
+      in-progress inter-site transfers (`SavedTransferOrder`), and the
+      territorial-control victory condition's sustain-turn counters
+      (`TerritorialControlCondition.ConsecutiveTurnsMet`/`RestoreConsecutiveTurns`) —
+      turn number was flagged as a known gap and has since been closed, and a
+      follow-up audit for "anything else worth saving" closed resource pool/
+      production queues/sustain counters too, and this pass's audit closed site
+      storage/armies/transfers the same way. **Still not saved, deliberately**:
+      camera position and current hex/army selection/transfer-picking mode
+      (transient UI state, not player progress).
 
 **Note on scope across this phase's passes:** same approach as Phases 0/1 — built the
 pure logic/data foundations (hex grid, sites, movement, turn resolution, victory
