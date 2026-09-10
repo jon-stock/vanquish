@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
@@ -68,6 +69,8 @@ namespace Vanquish.EditorTools
             TestTheatreMapHarnessLabAndFactoryProduction();
             TestTheatreMapHarnessSaveLoadRoundTrip();
             TestTheatreMapHarnessPointerOverUIDoesNotThrow();
+            TestTheatreMapHarnessArmyDeploymentAndCombat();
+            TestTheatreMapHarnessTransferBetweenSites();
 
             if (_failures > 0)
             {
@@ -937,6 +940,7 @@ namespace Vanquish.EditorTools
 
                 SiteBuildOption labOption = SiteBuildCatalog.Options.FirstOrDefault(o => o.Type == SiteType.Lab);
                 Expect(labOption.DisplayName != null, "SiteBuildCatalog should offer a Lab option");
+                SiteBuildOption warehouseOption = SiteBuildCatalog.Options.First(o => o.Type == SiteType.Warehouse);
 
                 // --- Build a Lab ---
                 HexTile labHex = harness.World.Grid.Tiles.FirstOrDefault(t =>
@@ -946,6 +950,15 @@ namespace Vanquish.EditorTools
 
                 Expect(!harness.CanDesignPlanAtSelectedTile(), "No Lab exists yet — should not be able to design a plan");
                 Expect(harness.TryBeginConstructionOnSelectedTile(SiteType.Lab, labOption.TurnsToBuild), "Should be able to start building a Lab here");
+
+                // --- Build a Warehouse too — production now always needs a
+                // storage-capable destination with room, chosen by the player
+                // when queuing (see TryQueueProduction) rather than landing in an
+                // unlimited global inventory pool.
+                HexTile warehouseHex = harness.World.Grid.Tiles.First(t =>
+                    t.Owner == TheatreFaction.Player && t.Terrain == TerrainType.Open && !harness.HasActiveSite(t.Coordinate) && !t.Coordinate.Equals(labHex.Coordinate));
+                harness.SelectTile(warehouseHex);
+                Expect(harness.TryBeginConstructionOnSelectedTile(SiteType.Warehouse, warehouseOption.TurnsToBuild), "Should be able to start building a Warehouse here");
 
                 for (int i = 0; i < labOption.TurnsToBuild; i++)
                     harness.AdvanceTurn();
@@ -960,34 +973,39 @@ namespace Vanquish.EditorTools
                 Expect(!harness.TryCreatePlan("falcon", UnitCategory.Missile, out string err2), "Duplicate name (case-insensitive) should be rejected");
                 Expect(err2 != null, "Duplicate-name rejection should include an error message");
 
-                GameObject showcase = GameObject.Find("PlanShowcase");
-                Expect(showcase != null, "Selecting the Lab with designed plans should build a PlanShowcase");
-                Expect(showcase != null && showcase.transform.childCount == 1, $"Showcase should have one preview slot per plan, got {showcase?.transform.childCount}");
-
                 DronePlan falcon = harness.PlayerPlans[0];
+
+                // --- Plan preview icons (shown directly in the bottom bar's cards, not floating in world space) ---
+                Texture2D falconIcon = PlanIconRenderer.GetOrCreateIcon(falcon);
+                Expect(falconIcon != null && falconIcon.width == 128 && falconIcon.height == 128, "GetOrCreateIcon should render a 128x128 icon for a designed plan");
+                Expect(GameObject.Find("PlanIconStage_" + falcon.Name) == null, "The icon-rendering stage/camera should be torn down after rendering, not left in the scene");
+                Expect(ReferenceEquals(PlanIconRenderer.GetOrCreateIcon(falcon), falconIcon), "A second call for the same plan should reuse the cached icon, not render a new one");
 
                 // --- Queue production at the seeded Player factory ---
                 Site playerFactory = harness.World.Sites.First(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.Factory);
+                Site playerWarehouse = harness.World.Sites.First(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.Warehouse);
                 HexTile factoryHex = harness.World.Grid.GetTile(playerFactory.Location);
                 harness.SelectTile(factoryHex);
 
                 Expect(harness.SelectedFactory() == playerFactory, "Selecting the Player factory's hex should resolve it via SelectedFactory()");
-                Expect(harness.TryQueueProduction(falcon), "Should be able to queue the Falcon for production");
+                Expect(harness.EligibleProductionDestinations(falcon).Contains(playerWarehouse), "The operational Warehouse should be an eligible production destination");
+                Expect(harness.TryQueueProduction(falcon), "Should be able to queue the Falcon for production (auto-picks the eligible Warehouse)");
 
                 var queue = harness.ProductionQueueAt(playerFactory);
                 Expect(queue.Count == 1, $"Factory should have 1 queued order, got {queue.Count}");
+                Expect(queue[0].Destination == playerWarehouse, "Queued order's destination should be the eligible Warehouse");
                 int expectedTurns = TheatreMapHarness.TurnsToProduce(UnitCategory.Quadcopter);
                 Expect(queue[0].TurnsRemaining == expectedTurns, $"Queued order should need {expectedTurns} turns, got {queue[0].TurnsRemaining}");
 
                 for (int i = 0; i < expectedTurns - 1; i++)
                     harness.AdvanceTurn();
                 Expect(harness.ProductionQueueAt(playerFactory).Count == 1, "Order should still be in progress before its last turn");
-                Expect(!harness.PlayerInventory.ContainsKey(falcon), "Inventory should not have the plan yet before production completes");
+                Expect(harness.StorageUsed(playerWarehouse, false) == 0, "Warehouse should not have the drone yet before production completes");
 
                 harness.AdvanceTurn();
                 Expect(harness.ProductionQueueAt(playerFactory).Count == 0, "Order should be removed from the queue once complete");
-                Expect(harness.PlayerInventory.TryGetValue(falcon, out int producedCount) && producedCount == 1,
-                    $"Inventory should have 1 Falcon after production completes, got {(harness.PlayerInventory.TryGetValue(falcon, out int c) ? c : -1)}");
+                Expect(harness.StorageUsed(playerWarehouse, false) == 1, $"Warehouse should have 1 Falcon after production completes, got {harness.StorageUsed(playerWarehouse, false)}");
+                Expect(harness.TotalStored(falcon) == 1, "TotalStored should reflect the produced Falcon across all sites");
 
                 // Selecting a non-factory tile should not resolve a factory.
                 harness.SelectTile(labHex);
@@ -1020,23 +1038,86 @@ namespace Vanquish.EditorTools
                 HexCoordinate labCoord = labHex.Coordinate;
                 harness.SelectTile(labHex);
                 Expect(harness.TryBeginConstructionOnSelectedTile(SiteType.Lab, 1), "Setup: should be able to start building a Lab");
+
+                HexTile warehouseHex = harness.World.Grid.Tiles.First(t =>
+                    t.Owner == TheatreFaction.Player && t.Terrain == TerrainType.Open && !harness.HasActiveSite(t.Coordinate) && !t.Coordinate.Equals(labCoord));
+                HexCoordinate warehouseCoord = warehouseHex.Coordinate;
+                harness.SelectTile(warehouseHex);
+                Expect(harness.TryBeginConstructionOnSelectedTile(SiteType.Warehouse, 1), "Setup: should be able to start building a Warehouse");
+
+                HexTile airfieldHex = harness.World.Grid.Tiles.First(t =>
+                    t.Owner == TheatreFaction.Player && t.Terrain == TerrainType.Open && !harness.HasActiveSite(t.Coordinate) &&
+                    !t.Coordinate.Equals(labCoord) && !t.Coordinate.Equals(warehouseCoord));
+                HexCoordinate airfieldCoord = airfieldHex.Coordinate;
+                harness.SelectTile(airfieldHex);
+                Expect(harness.TryBeginConstructionOnSelectedTile(SiteType.LaunchPlatform, 1), "Setup: should be able to start building an Airfield");
+
                 harness.AdvanceTurn();
                 harness.SelectTile(labHex);
                 Expect(harness.CanDesignPlanAtSelectedTile(), "Setup: Lab should be operational");
                 Expect(harness.TryCreatePlan("Falcon", UnitCategory.Quadcopter, out _), "Setup: designing 'Falcon' should succeed");
+                Expect(harness.TryCreatePlan("Sparrow", UnitCategory.Missile, out _), "Setup: designing 'Sparrow' should succeed");
+                DronePlan falcon = harness.PlayerPlans.First(p => p.Name == "Falcon");
+                DronePlan sparrow = harness.PlayerPlans.First(p => p.Name == "Sparrow");
 
                 Site playerFactory = harness.World.Sites.First(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.Factory);
+                Site playerWarehouse = harness.World.Sites.First(s => s.Location.Equals(warehouseCoord));
+                Site playerAirfield = harness.World.Sites.First(s => s.Location.Equals(airfieldCoord));
                 harness.SelectTile(harness.World.Grid.GetTile(playerFactory.Location));
-                DronePlan falcon = harness.PlayerPlans[0];
-                Expect(harness.TryQueueProduction(falcon), "Setup: queuing Falcon production should succeed");
+
+                Expect(harness.TryQueueProduction(falcon, playerWarehouse), "Setup: queuing Falcon into the Warehouse should succeed");
+                Expect(harness.TryQueueProduction(sparrow, playerWarehouse), "Setup: queuing Sparrow into the Warehouse should succeed");
+
                 int turns = TheatreMapHarness.TurnsToProduce(UnitCategory.Quadcopter);
                 for (int i = 0; i < turns; i++)
                     harness.AdvanceTurn();
-                Expect(harness.PlayerInventory.TryGetValue(falcon, out int producedBefore) && producedBefore == 1, "Setup: Falcon production should have completed");
+                Expect(harness.StorageUsed(playerWarehouse, false) == 1, "Setup: Warehouse Falcon production should have completed");
+                Expect(harness.StorageUsed(playerWarehouse, true) == 1, "Setup: Warehouse Sparrow production should have completed");
 
-                // Queue a second order that will NOT complete before saving, so the
-                // in-progress queue itself (not just completed inventory) round-trips.
-                Expect(harness.TryQueueProduction(falcon), "Setup: queuing a second Falcon should succeed");
+                // Manufactured output always lands in a Warehouse first — move it
+                // on to the Airfield via a transfer (always exactly 1 turn,
+                // regardless of distance).
+                Expect(harness.TryBeginTransfer(playerWarehouse, playerAirfield, falcon, out string falconTransferError), $"Setup: transferring Falcon to the Airfield should succeed, got {falconTransferError}");
+                Expect(harness.StorageUsed(playerWarehouse, false) == 0, "Setup: beginning a transfer should immediately remove the stock from the Warehouse");
+                Expect(harness.TryBeginTransfer(playerWarehouse, playerAirfield, sparrow, out string sparrowTransferError), $"Setup: transferring Sparrow to the Airfield should succeed, got {sparrowTransferError}");
+
+                harness.AdvanceTurn(); // completes both 1-turn transfers
+                Expect(harness.StorageUsed(playerAirfield, false) == 1, "Setup: Airfield should have received the transferred Falcon");
+                Expect(harness.StorageUsed(playerAirfield, true) == 1, "Setup: Airfield should have received the transferred Sparrow");
+
+                // Deploy the Airfield's stock into a new army — its subsequent move
+                // (below) is deliberately the very last turn-affecting action before
+                // saving, so its HasMovedThisTurn flag survives untouched by any of
+                // the further AdvanceTurn calls this setup still needs to make.
+                var deploySelection = new Dictionary<DronePlan, int> { { falcon, 1 }, { sparrow, 1 } };
+                Expect(harness.TryDeployArmy(playerAirfield, deploySelection, out string deployError), $"Setup: deploying an army should succeed, got {deployError}");
+                Expect(harness.Armies.Count == 1, "Setup: exactly one army should exist after deployment");
+                Army deployedArmy = harness.Armies[0];
+
+                // Produce one more Falcon and begin (but don't finish ticking) a
+                // transfer of it, so an in-progress TransferOrder — not just a
+                // completed one — round-trips too.
+                Expect(harness.TryQueueProduction(falcon, playerWarehouse), "Setup: queuing another Falcon for transfer round-trip coverage should succeed");
+                for (int i = 0; i < turns; i++)
+                    harness.AdvanceTurn();
+                Expect(harness.StorageUsed(playerWarehouse, false) == 1, "Setup: Warehouse should have produced another Falcon for the transfer round-trip test");
+                Expect(harness.TryBeginTransfer(playerWarehouse, playerAirfield, falcon, out string pendingTransferError), $"Setup: beginning a transfer that stays in-progress at save time should succeed, got {pendingTransferError}");
+                Expect(harness.StorageUsed(playerWarehouse, false) == 0, "Setup: the in-progress transfer should have already removed the stock from the Warehouse");
+
+                // Queue a second Falcon order (into the Warehouse) that will NOT
+                // complete/tick before saving, so the in-progress queue itself (with
+                // its destination) — not just completed storage — round-trips too.
+                Expect(harness.TryQueueProduction(falcon, playerWarehouse), "Setup: queuing a second Falcon should succeed");
+
+                // Move the deployed army now — the very last turn-affecting action
+                // before saving — so its HasMovedThisTurn flag is still true at save
+                // time (every AdvanceTurn above already happened).
+                HexCoordinate moveDestination = deployedArmy.Location.Neighbors().First(n =>
+                {
+                    HexTile t = harness.World.Grid.GetTile(n);
+                    return t != null && t.Owner == TheatreFaction.Player && !harness.HasActiveSite(n);
+                });
+                Expect(harness.TryMoveArmy(deployedArmy, moveDestination), "Setup: moving the army onto empty owned territory should succeed");
 
                 int turnBeforeSave = harness.Controller.CurrentTurn;
                 int playerResourceBeforeSave = harness.Controller.ResourcePool[TheatreFaction.Player];
@@ -1051,6 +1132,8 @@ namespace Vanquish.EditorTools
                 Expect(harness.World.Grid.GetTile(capturedCoord).Owner == TheatreFaction.Enemy, "New game should reset the captured hex back to its default owner");
                 Expect(harness.PlayerPlans.Count == 0, "New game should clear designed plans");
                 Expect(harness.Controller.CurrentTurn == 0, "New game should reset the turn counter");
+                Expect(harness.Armies.Count == 0, "New game should clear all armies");
+                Expect(harness.TransferOrders.Count == 0, "New game should clear all in-progress transfers");
 
                 Expect(harness.LoadGame(), "LoadGame should succeed since a save was just written");
 
@@ -1060,15 +1143,23 @@ namespace Vanquish.EditorTools
                 Expect(loadedLab != null, "Loaded game should restore the built Lab");
                 Expect(loadedLab != null && loadedLab.IsOperational, "Loaded Lab should be restored as Operational");
 
-                Expect(harness.PlayerPlans.Count == 1 && harness.PlayerPlans[0].Name == "Falcon", "Loaded game should restore the designed plan");
-                Expect(harness.PlayerPlans[0].Category == UnitCategory.Quadcopter, "Loaded plan should restore its category");
-
-                DronePlan loadedFalcon = harness.PlayerPlans[0];
-                Expect(harness.PlayerInventory.TryGetValue(loadedFalcon, out int producedAfter) && producedAfter == 1,
-                    "Loaded game should restore the produced inventory count");
+                Expect(harness.PlayerPlans.Count == 2 && harness.PlayerPlans.Any(p => p.Name == "Falcon") && harness.PlayerPlans.Any(p => p.Name == "Sparrow"),
+                    "Loaded game should restore both designed plans");
+                DronePlan loadedFalcon = harness.PlayerPlans.First(p => p.Name == "Falcon");
+                Expect(loadedFalcon.Category == UnitCategory.Quadcopter, "Loaded plan should restore its category");
 
                 Site loadedFactory = harness.World.Sites.FirstOrDefault(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.Factory);
                 Expect(loadedFactory != null && loadedFactory.IsOperational, "Loaded game should restore the seeded Player factory");
+
+                Site loadedWarehouse = harness.World.Sites.FirstOrDefault(s => s.Location.Equals(warehouseCoord) && s.Type == SiteType.Warehouse);
+                Expect(loadedWarehouse != null && loadedWarehouse.IsOperational, "Loaded game should restore the built Warehouse");
+                Expect(loadedWarehouse != null && harness.StorageUsed(loadedWarehouse, false) == 0,
+                    $"Loaded game should restore the Warehouse's storage (empty — its Falcon stock was already moved into the in-progress transfer), got {(loadedWarehouse != null ? harness.StorageUsed(loadedWarehouse, false) : -1)}");
+
+                Site loadedAirfield = harness.World.Sites.FirstOrDefault(s => s.Location.Equals(airfieldCoord) && s.Type == SiteType.LaunchPlatform);
+                Expect(loadedAirfield != null && loadedAirfield.IsOperational, "Loaded game should restore the built Airfield");
+                Expect(loadedAirfield != null && harness.StorageUsed(loadedAirfield, false) == 0 && harness.StorageUsed(loadedAirfield, true) == 0,
+                    "Loaded game should restore the Airfield's now-empty storage (its stock was deployed into an army before saving)");
 
                 Expect(harness.Controller.CurrentTurn == turnBeforeSave, $"Loaded game should restore the turn counter (expected {turnBeforeSave}, got {harness.Controller.CurrentTurn})");
                 Expect(harness.Controller.Result == TheatreResult.InProgress, "Loaded game should restore the result");
@@ -1079,6 +1170,26 @@ namespace Vanquish.EditorTools
                 Expect(loadedQueue.Count == 1, $"Loaded game should restore the still-in-progress production order, got {loadedQueue.Count}");
                 Expect(loadedQueue.Count == 1 && loadedQueue[0].Plan.Name == "Falcon" && loadedQueue[0].TurnsRemaining == TheatreMapHarness.TurnsToProduce(UnitCategory.Quadcopter),
                     "Loaded production order should restore the correct plan and full remaining turns (it hadn't ticked at all before saving)");
+                Expect(loadedQueue.Count == 1 && loadedQueue[0].Destination == loadedWarehouse,
+                    "Loaded production order should restore its destination site");
+
+                Expect(harness.TransferOrders.Count == 1, $"Loaded game should restore the still-in-progress transfer, got {harness.TransferOrders.Count}");
+                TransferOrder loadedTransfer = harness.TransferOrders[0];
+                Expect(loadedTransfer.Source == loadedWarehouse, "Loaded transfer should restore its source site");
+                Expect(loadedTransfer.Destination == loadedAirfield, "Loaded transfer should restore its destination site");
+                Expect(loadedTransfer.Plan.Name == "Falcon" && loadedTransfer.Amount == 1, "Loaded transfer should restore its plan and amount");
+                Expect(loadedTransfer.TurnsRemaining == 1, $"Loaded transfer should restore its remaining turns (it hadn't ticked at all before saving), got {loadedTransfer.TurnsRemaining}");
+
+                Expect(harness.Armies.Count == 1, $"Loaded game should restore exactly one army, got {harness.Armies.Count}");
+                Army loadedArmy = harness.Armies[0];
+                Expect(loadedArmy.Owner == TheatreFaction.Player, "Loaded army should restore its owner");
+                Expect(loadedArmy.Location.Equals(moveDestination), "Loaded army should restore its post-move location");
+                Expect(loadedArmy.HasMovedThisTurn, "Loaded army should restore that it already moved this turn");
+                Expect(loadedArmy.DroneCount == 1 && loadedArmy.MissileCount == 1, "Loaded army should restore its composition (1 drone + 1 missile)");
+                Expect(loadedArmy.IsCombatEffective, "Loaded army should still be combat effective");
+                Expect(loadedArmy.Name == deployedArmy.Name, $"Loaded army should restore its randomly-assigned name (expected '{deployedArmy.Name}', got '{loadedArmy.Name}')");
+                Expect(loadedArmy.Experience == deployedArmy.Experience, "Loaded army should restore its experience");
+                Expect(loadedArmy.Rank == deployedArmy.Rank, "Loaded army should restore its rank");
             }
             finally
             {
@@ -1097,14 +1208,305 @@ namespace Vanquish.EditorTools
 
                 // Regression coverage for "focus goes when I click build": the pointer-
                 // over-UI check must exist and be callable (wired into both the
-                // harness's own click handling and the camera controller), and must
-                // reflect the menu's open/closed state via the delegate chain.
-                bool overUiWhenClosed = harness.IsPointerOverUI();
-                Expect(!overUiWhenClosed, "At the harness's own HUD-panel-relative default mouse position in a headless run, IsPointerOverUI should be false (menu closed, and (0,0) is outside the corner panel)");
+                // harness's own click handling and the camera controller). The bottom
+                // action bar spans the full width of the screen's bottom edge, so a
+                // headless run's default mouse position (0,0) — the bottom-left
+                // corner — is itself inside that bar; this just confirms the check
+                // runs without throwing and correctly reports "over UI" there.
+                bool overUiAtBottomEdge = harness.IsPointerOverUI();
+                Expect(overUiAtBottomEdge, "The default (bottom-edge) mouse position in a headless run should be considered over the bottom action bar");
 
                 var cameraController = harnessGo.GetComponentInChildren<TheatreMapCameraController>();
                 Expect(cameraController != null && cameraController.isPointerOverUI != null,
                     "Camera controller should have its isPointerOverUI delegate wired up by the harness");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(harnessGo);
+            }
+        }
+
+        private static void TestTheatreMapHarnessTransferBetweenSites()
+        {
+            var harnessGo = new GameObject("SmokeTest_TheatreMapHarness_Transfer");
+            try
+            {
+                var harness = harnessGo.AddComponent<TheatreMapHarness>();
+                harness.Build();
+
+                HexTile labHex = harness.World.Grid.Tiles.First(t => t.Owner == TheatreFaction.Player && t.Terrain == TerrainType.Open && !harness.HasActiveSite(t.Coordinate));
+                harness.SelectTile(labHex);
+                Expect(harness.TryBeginConstructionOnSelectedTile(SiteType.Lab, 1), "Setup: should be able to start building a Lab");
+
+                HexTile warehouseHex = harness.World.Grid.Tiles.First(t =>
+                    t.Owner == TheatreFaction.Player && t.Terrain == TerrainType.Open && !harness.HasActiveSite(t.Coordinate) && !t.Coordinate.Equals(labHex.Coordinate));
+                harness.SelectTile(warehouseHex);
+                Expect(harness.TryBeginConstructionOnSelectedTile(SiteType.Warehouse, 1), "Setup: should be able to start building a Warehouse");
+
+                HexTile airfieldHex = harness.World.Grid.Tiles.First(t =>
+                    t.Owner == TheatreFaction.Player && t.Terrain == TerrainType.Open && !harness.HasActiveSite(t.Coordinate) &&
+                    !t.Coordinate.Equals(labHex.Coordinate) && !t.Coordinate.Equals(warehouseHex.Coordinate));
+                harness.SelectTile(airfieldHex);
+                Expect(harness.TryBeginConstructionOnSelectedTile(SiteType.LaunchPlatform, 1), "Setup: should be able to start building an Airfield");
+
+                harness.AdvanceTurn();
+                harness.SelectTile(labHex);
+                Expect(harness.TryCreatePlan("Falcon", UnitCategory.Quadcopter, out _), "Setup: designing 'Falcon' should succeed");
+                DronePlan falcon = harness.PlayerPlans.First(p => p.Name == "Falcon");
+
+                Site playerFactory = harness.World.Sites.First(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.Factory);
+                Site playerWarehouse = harness.World.Sites.First(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.Warehouse);
+                Site playerAirfield = harness.World.Sites.First(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.LaunchPlatform);
+                harness.SelectTile(harness.World.Grid.GetTile(playerFactory.Location));
+
+                // --- Production can only ever target a Warehouse, never an Airfield directly ---
+                Expect(!harness.TryQueueProduction(falcon, playerAirfield), "Queuing production straight into an Airfield should fail — manufactured output always goes to a Warehouse first");
+                Expect(harness.EligibleProductionDestinations(falcon).Contains(playerWarehouse) && !harness.EligibleProductionDestinations(falcon).Contains(playerAirfield),
+                    "Only the Warehouse should be an eligible production destination");
+
+                Expect(harness.TryQueueProduction(falcon, playerWarehouse), "Queuing Falcon into the Warehouse should succeed");
+                int turns = TheatreMapHarness.TurnsToProduce(UnitCategory.Quadcopter);
+                for (int i = 0; i < turns; i++)
+                    harness.AdvanceTurn();
+                Expect(harness.StorageUsed(playerWarehouse, false) == 1, "Warehouse should have the produced Falcon");
+
+                // --- Transfer-picking mode: Move, then click an invalid target cancels it ---
+                harness.SelectTile(warehouseHex);
+                Expect(!harness.IsPickingTransferDestination, "Should not be in transfer-picking mode before clicking Move");
+                harness.BeginTransferPicking(playerWarehouse, falcon);
+                Expect(harness.IsPickingTransferDestination, "BeginTransferPicking should enter picking mode");
+                harness.CancelTransferPicking();
+                Expect(!harness.IsPickingTransferDestination, "CancelTransferPicking should leave picking mode");
+                Expect(harness.StorageUsed(playerWarehouse, false) == 1, "Cancelling should not have moved anything");
+
+                // --- A same-site transfer is invalid ---
+                Expect(!harness.TryBeginTransfer(playerWarehouse, playerWarehouse, falcon, out string sameSiteError), "Transferring a site to itself should fail");
+                Expect(sameSiteError != null, "Same-site transfer failure should include an error message");
+
+                // --- A real transfer: stock leaves the source immediately, lands at the destination after exactly 1 turn ---
+                Expect(harness.TryBeginTransfer(playerWarehouse, playerAirfield, falcon, out string transferError), $"Transferring Falcon to the Airfield should succeed, got {transferError}");
+                Expect(harness.StorageUsed(playerWarehouse, false) == 0, "The transferred stock should leave the Warehouse immediately");
+                Expect(harness.StorageUsed(playerAirfield, false) == 0, "The transferred stock should not have arrived at the Airfield yet");
+                Expect(harness.TransferOrders.Count == 1, "There should be exactly one in-progress transfer");
+                TransferOrder order = harness.TransferOrders[0];
+                Expect(order.Source == playerWarehouse && order.Destination == playerAirfield && order.Plan == falcon && order.Amount == 1,
+                    "The transfer order should record the correct source/destination/plan/amount");
+                Expect(order.TurnsRemaining == 1, "A transfer should always take exactly 1 turn");
+
+                Expect(!harness.TryBeginTransfer(playerWarehouse, playerAirfield, falcon, out string nothingLeftError), "Transferring again immediately should fail — nothing left to move");
+                Expect(nothingLeftError != null, "Nothing-to-move failure should include an error message");
+
+                harness.AdvanceTurn();
+                Expect(harness.StorageUsed(playerAirfield, false) == 1, "The transfer should have landed at the Airfield after 1 turn");
+                Expect(harness.TransferOrders.Count == 0, "The completed transfer should be removed from the in-progress list");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(harnessGo);
+            }
+        }
+
+        private static void TestTheatreMapHarnessArmyDeploymentAndCombat()
+        {
+            var harnessGo = new GameObject("SmokeTest_TheatreMapHarness_ArmyCombat");
+            try
+            {
+                var harness = harnessGo.AddComponent<TheatreMapHarness>();
+                harness.Build();
+
+                // --- Build a Lab + Airfield + Warehouse, design plans, produce a drone + a missile into the Warehouse and transfer them to the Airfield ---
+                HexTile labHex = harness.World.Grid.Tiles.First(t => t.Owner == TheatreFaction.Player && t.Terrain == TerrainType.Open && !harness.HasActiveSite(t.Coordinate));
+                harness.SelectTile(labHex);
+                Expect(harness.TryBeginConstructionOnSelectedTile(SiteType.Lab, 1), "Setup: should be able to start building a Lab");
+
+                // Built directly on the front line (a Player hex bordering Enemy
+                // territory) so the deployed army can immediately exercise both the
+                // "capture an empty enemy hex" and "attack an enemy site" cases below
+                // without needing a fragile multi-hex walk toward the border first.
+                HexTile airfieldHex = harness.World.Grid.Tiles.First(t =>
+                    t.Owner == TheatreFaction.Player && t.Terrain == TerrainType.Open && !harness.HasActiveSite(t.Coordinate) &&
+                    !t.Coordinate.Equals(labHex.Coordinate) &&
+                    harness.World.Grid.NeighborsOf(t.Coordinate).Any(n => n.Owner == TheatreFaction.Enemy));
+                harness.SelectTile(airfieldHex);
+                Expect(harness.TryBeginConstructionOnSelectedTile(SiteType.LaunchPlatform, 1), "Setup: should be able to start building an Airfield");
+
+                HexTile warehouseHex = harness.World.Grid.Tiles.First(t =>
+                    t.Owner == TheatreFaction.Player && t.Terrain == TerrainType.Open && !harness.HasActiveSite(t.Coordinate) &&
+                    !t.Coordinate.Equals(labHex.Coordinate) && !t.Coordinate.Equals(airfieldHex.Coordinate));
+                harness.SelectTile(warehouseHex);
+                Expect(harness.TryBeginConstructionOnSelectedTile(SiteType.Warehouse, 1), "Setup: should be able to start building a Warehouse");
+
+                harness.AdvanceTurn();
+                harness.SelectTile(labHex);
+                Expect(harness.TryCreatePlan("Falcon", UnitCategory.Quadcopter, out _), "Setup: designing 'Falcon' should succeed");
+                Expect(harness.TryCreatePlan("Sparrow", UnitCategory.Missile, out _), "Setup: designing 'Sparrow' should succeed");
+                DronePlan falcon = harness.PlayerPlans.First(p => p.Name == "Falcon");
+                DronePlan sparrow = harness.PlayerPlans.First(p => p.Name == "Sparrow");
+
+                Site playerFactory = harness.World.Sites.First(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.Factory);
+                Site playerAirfield = harness.World.Sites.First(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.LaunchPlatform);
+                Site playerWarehouse = harness.World.Sites.First(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.Warehouse);
+                harness.SelectTile(harness.World.Grid.GetTile(playerFactory.Location));
+
+                Expect(harness.TryQueueProduction(falcon, playerWarehouse), "Setup: queuing Falcon into the Warehouse should succeed");
+                Expect(harness.TryQueueProduction(sparrow, playerWarehouse), "Setup: queuing Sparrow into the Warehouse should succeed");
+                int maxTurns = Mathf.Max(TheatreMapHarness.TurnsToProduce(UnitCategory.Quadcopter), TheatreMapHarness.TurnsToProduce(UnitCategory.Missile));
+                for (int i = 0; i < maxTurns; i++)
+                    harness.AdvanceTurn();
+                Expect(harness.StorageUsed(playerWarehouse, false) == 1, "Setup: Warehouse should have 1 drone stored");
+                Expect(harness.StorageUsed(playerWarehouse, true) == 1, "Setup: Warehouse should have 1 missile stored");
+
+                Expect(harness.TryBeginTransfer(playerWarehouse, playerAirfield, falcon, out string falconTransferError), $"Setup: transferring Falcon to the Airfield should succeed, got {falconTransferError}");
+                Expect(harness.TryBeginTransfer(playerWarehouse, playerAirfield, sparrow, out string sparrowTransferError), $"Setup: transferring Sparrow to the Airfield should succeed, got {sparrowTransferError}");
+                harness.AdvanceTurn(); // completes both 1-turn transfers
+                Expect(harness.StorageUsed(playerAirfield, false) == 1, "Setup: Airfield should have 1 drone stored after the transfer completes");
+                Expect(harness.StorageUsed(playerAirfield, true) == 1, "Setup: Airfield should have 1 missile stored after the transfer completes");
+
+                // --- Deploying with nothing selected should fail ---
+                Expect(!harness.TryDeployArmy(playerAirfield, new Dictionary<DronePlan, int>(), out string emptyError), "Deploying with an empty selection should fail");
+                Expect(emptyError != null, "Empty-selection deploy failure should include an error message");
+
+                // --- Deploy the full stock into a new army ---
+                var selection = new Dictionary<DronePlan, int> { { falcon, 1 }, { sparrow, 1 } };
+                Expect(harness.TryDeployArmy(playerAirfield, selection, out string deployError), $"Deploying a valid selection should succeed, got {deployError}");
+                Expect(harness.StorageUsed(playerAirfield, false) == 0 && harness.StorageUsed(playerAirfield, true) == 0, "Deploying should remove the deployed units from Airfield storage");
+                Expect(harness.Armies.Count == 1, "Deploying should create exactly one army");
+
+                Army army = harness.Armies[0];
+                Expect(army.Owner == TheatreFaction.Player, "Deployed army should belong to the Player");
+                Expect(army.Location.Equals(playerAirfield.Location), "Deployed army should start at the Airfield's hex");
+                Expect(army.IsCombatEffective, "Army with both a drone and a missile should be combat effective");
+                Expect(!army.HasMovedThisTurn, "Freshly deployed army should not be marked as already moved");
+                Expect(!string.IsNullOrEmpty(army.Name), "Deployed army should have a randomly assigned name");
+                Expect(army.Rank == ArmyRank.Private && army.Experience == 0, "A freshly deployed army should start at Private rank with no experience");
+
+                // --- Move into an empty enemy hex: should capture it ---
+                HexCoordinate enemyEmptyHex = army.Location.Neighbors().First(n =>
+                {
+                    HexTile t = harness.World.Grid.GetTile(n);
+                    return t != null && t.Owner == TheatreFaction.Enemy && !harness.HasActiveSite(n);
+                });
+                Expect(harness.TryMoveArmy(army, enemyEmptyHex), "Moving into an empty enemy hex should succeed");
+                Expect(harness.World.Grid.GetTile(enemyEmptyHex).Owner == TheatreFaction.Player, "Moving an army into an empty enemy hex should capture it for the mover's faction");
+                Expect(army.Location.Equals(enemyEmptyHex), "Army should now be sitting on the captured hex");
+                Expect(army.HasMovedThisTurn, "Army should be marked as moved this turn");
+                Expect(!harness.TryMoveArmy(army, army.Location.Neighbors().First()), "An army should not be able to move twice in the same turn");
+
+                harness.AdvanceTurn();
+                Expect(!army.HasMovedThisTurn, "AdvanceTurn should reset every army's HasMovedThisTurn flag");
+
+                // --- Move into an enemy Base: should resolve via TheatreCombatResolver and damage/destroy it.
+                // A single drone/missile can only chip a hardened Base down to its soft-
+                // cap residual (PLAN.md's "soften vs finish" rule — see DamageResolver),
+                // so use a separately-built, much larger strike force here rather than
+                // the earlier 1-drone/1-missile army used for the movement checks above.
+                Site enemyBase = harness.World.Sites.First(s => s.Owner == TheatreFaction.Enemy && s.Type == SiteType.Base);
+                float healthBefore = enemyBase.HealthFraction01;
+                var strikeForce = new Army(TheatreFaction.Player, army.Location);
+                strikeForce.Composition[falcon] = 30;
+                strikeForce.Composition[sparrow] = 30;
+                TheatreCombatResult siteResult = TheatreCombatResolver.ResolveArmyVsSite(strikeForce, enemyBase);
+                Expect(siteResult.Outcome == TheatreCombatOutcome.AttackerWin, "A sufficiently large combat-effective army should be able to damage/destroy a completely undefended enemy Base");
+                Expect(enemyBase.HealthFraction01 < healthBefore, "Attacking an enemy Base should reduce its health fraction");
+                Expect(siteResult.AttackerMissilesUsed > 0, "Winning the fight should have expended at least one missile");
+                Expect(strikeForce.Experience > 0, "Winning a fight against a site should award the attacker experience");
+
+                // --- Regression: a losing attack must not destroy the attacker (it
+                // previously vanished from the map entirely) — since the site has no
+                // active defenses of its own, a failed attack should just fail to
+                // break through and hold position, not be wiped out. Reposition the
+                // existing weak 1-drone/1-missile army next to the (already heavily
+                // damaged, but not destroyed) enemy Base directly via Army.MoveTo —
+                // test setup only, bypassing the normal adjacency-based turn flow —
+                // then attack for real via the harness.
+                HexCoordinate baseNeighbor = harness.World.Grid.NeighborsOf(enemyBase.Location).First().Coordinate;
+                army.MoveTo(baseNeighbor);
+                army.HasMovedThisTurn = false;
+                int missilesBeforeLosingAttack = army.MissileCount;
+                Expect(harness.TryMoveArmy(army, enemyBase.Location), "Attacking (and losing to) an enemy Base should still report a successful move attempt");
+                Expect(harness.Armies.Contains(army), "A losing attacker must not be removed from the map (regression)");
+                Expect(army.Location.Equals(baseNeighbor), "A losing attacker should hold its original position rather than advancing onto the contested hex");
+                Expect(army.MissileCount < missilesBeforeLosingAttack, "A losing attack should still expend the missile(s) it fired");
+
+                // --- Army-vs-army: a much larger combat-effective attacker should destroy an undefended enemy army ---
+                var attacker = new Army(TheatreFaction.Player, new HexCoordinate(0, 0));
+                attacker.Composition[falcon] = 3;
+                attacker.Composition[sparrow] = 3;
+                var defender = new Army(TheatreFaction.Enemy, new HexCoordinate(1, 0));
+                defender.Composition[falcon] = 1;
+                TheatreCombatResult armyResult = TheatreCombatResolver.ResolveArmyVsArmy(attacker, defender);
+                Expect(armyResult.Outcome == TheatreCombatOutcome.AttackerWin, "A much larger attacking army should defeat a small undefended one");
+                Expect(defender.DroneCount == 0 && defender.MissileCount == 0, "A defeated defending army should be left empty");
+                Expect(attacker.Rank == ArmyRank.Corporal, $"Destroying an enemy army should award enough experience to reach Corporal, got {attacker.Rank} (XP {attacker.Experience})");
+
+                // --- Army-vs-army: an attacker with no missiles can't damage anything and loses by default ---
+                var unarmedAttacker = new Army(TheatreFaction.Player, new HexCoordinate(0, 0));
+                unarmedAttacker.Composition[falcon] = 5;
+                var toughDefender = new Army(TheatreFaction.Enemy, new HexCoordinate(1, 0));
+                toughDefender.Composition[falcon] = 1;
+                TheatreCombatResult unarmedResult = TheatreCombatResolver.ResolveArmyVsArmy(unarmedAttacker, toughDefender);
+                Expect(unarmedResult.Outcome == TheatreCombatOutcome.DefenderWin, "An attacker with no missiles cannot win a fight");
+                Expect(unarmedResult.AttackerMissilesUsed == 0, "An attacker with no missiles should expend none");
+                Expect(toughDefender.DroneCount == 1, "The defender should take no losses against a harmless (unarmed) attacker");
+                Expect(unarmedAttacker.Experience == 0, "A losing attacker should not be awarded experience");
+
+                // --- Merge / transfer / restock / unload: deploy two more small armies at the Airfield ---
+                Expect(harness.TryQueueProduction(falcon, playerWarehouse), "Setup: queuing more Falcons for merge/transfer coverage should succeed");
+                Expect(harness.TryQueueProduction(falcon, playerWarehouse), "Setup: queuing more Falcons for merge/transfer coverage should succeed");
+                Expect(harness.TryQueueProduction(falcon, playerWarehouse), "Setup: queuing more Falcons for merge/transfer coverage should succeed");
+                Expect(harness.TryQueueProduction(sparrow, playerWarehouse), "Setup: queuing more Sparrows for merge/transfer coverage should succeed");
+                Expect(harness.TryQueueProduction(sparrow, playerWarehouse), "Setup: queuing more Sparrows for merge/transfer coverage should succeed");
+                Expect(harness.TryQueueProduction(sparrow, playerWarehouse), "Setup: queuing more Sparrows for merge/transfer coverage should succeed");
+                for (int i = 0; i < maxTurns; i++)
+                    harness.AdvanceTurn();
+                Expect(harness.StorageUsed(playerWarehouse, false) == 3 && harness.StorageUsed(playerWarehouse, true) == 3,
+                    $"Setup: Warehouse should have produced 3 drones/3 missiles, got {harness.StorageUsed(playerWarehouse, false)}/{harness.StorageUsed(playerWarehouse, true)}");
+
+                // A single transfer moves the entire current stock of a Plan, so one
+                // call each moves all 3 Falcons/Sparrows at once.
+                Expect(harness.TryBeginTransfer(playerWarehouse, playerAirfield, falcon, out string bulkFalconError), $"Setup: bulk-transferring Falcons to the Airfield should succeed, got {bulkFalconError}");
+                Expect(harness.TryBeginTransfer(playerWarehouse, playerAirfield, sparrow, out string bulkSparrowError), $"Setup: bulk-transferring Sparrows to the Airfield should succeed, got {bulkSparrowError}");
+                harness.AdvanceTurn();
+                Expect(harness.StorageUsed(playerAirfield, false) == 3 && harness.StorageUsed(playerAirfield, true) == 3,
+                    $"Setup: Airfield should have restocked 3 drones/3 missiles, got {harness.StorageUsed(playerAirfield, false)}/{harness.StorageUsed(playerAirfield, true)}");
+
+                var deployB = new Dictionary<DronePlan, int> { { falcon, 1 }, { sparrow, 1 } };
+                Expect(harness.TryDeployArmy(playerAirfield, deployB, out string armyBError), $"Setup: deploying armyB should succeed, got {armyBError}");
+                Army armyB = harness.Armies.Last();
+                var deployC = new Dictionary<DronePlan, int> { { falcon, 1 }, { sparrow, 1 } };
+                Expect(harness.TryDeployArmy(playerAirfield, deployC, out string armyCError), $"Setup: deploying armyC should succeed, got {armyCError}");
+                Army armyC = harness.Armies.Last();
+                Expect(armyB.Location.Equals(armyC.Location), "Setup: both armies should be deployed onto the same Airfield hex");
+
+                // --- Transfer 1 missile from armyB to armyC (same hex, same faction) ---
+                Expect(harness.TryTransferUnits(armyB, armyC, sparrow, 1, out string transferError), $"Transferring units between same-hex same-faction armies should succeed, got {transferError}");
+                Expect(armyB.MissileCount == 0, "Source army should have lost the transferred missile");
+                Expect(armyC.MissileCount == 2, "Target army should have gained the transferred missile");
+                Expect(!harness.TryTransferUnits(armyB, armyC, sparrow, 1, out string overTransferError), "Transferring more units than a source army holds should fail");
+                Expect(overTransferError != null, "Over-transfer failure should include an error message");
+
+                // --- Merge armyB fully into armyC ---
+                int armiesBeforeMerge = harness.Armies.Count;
+                Expect(harness.TryMergeArmies(armyB, armyC, out string mergeError), $"Merging same-hex same-faction armies should succeed, got {mergeError}");
+                Expect(!harness.Armies.Contains(armyB), "Merged-away army should be removed from the map");
+                Expect(harness.Armies.Count == armiesBeforeMerge - 1, "Merging should reduce the army count by one");
+                Expect(armyC.DroneCount == 2, "Merged army should have absorbed the other army's drones");
+
+                // --- Restock armyC from the Airfield's remaining storage ---
+                int missilesBeforeRestock = armyC.MissileCount;
+                int storedMissilesBeforeRestock = harness.StorageUsed(playerAirfield, true);
+                Expect(storedMissilesBeforeRestock > 0, "Setup: Airfield should still have spare missiles stored for the restock test");
+                var restockSelection = new Dictionary<DronePlan, int> { { sparrow, 1 } };
+                Expect(harness.TryRestockArmy(armyC, playerAirfield, restockSelection, out string restockError), $"Restocking an army standing on its Airfield should succeed, got {restockError}");
+                Expect(armyC.MissileCount == missilesBeforeRestock + 1, "Restocking should add to the army's missile count");
+                Expect(harness.StorageUsed(playerAirfield, true) == storedMissilesBeforeRestock - 1, "Restocking should remove from the Airfield's storage");
+
+                // --- Unload 1 drone from armyC back into storage ---
+                int dronesBeforeUnload = armyC.DroneCount;
+                int storedDronesBeforeUnload = harness.StorageUsed(playerAirfield, false);
+                Expect(harness.TryUnloadArmy(armyC, playerAirfield, falcon, 1, out string unloadError), $"Unloading from an army standing on its Airfield should succeed, got {unloadError}");
+                Expect(armyC.DroneCount == dronesBeforeUnload - 1, "Unloading should remove from the army's drone count");
+                Expect(harness.StorageUsed(playerAirfield, false) == storedDronesBeforeUnload + 1, "Unloading should add back to the Airfield's storage");
             }
             finally
             {

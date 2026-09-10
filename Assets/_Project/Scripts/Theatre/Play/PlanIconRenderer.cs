@@ -21,13 +21,13 @@ namespace Vanquish.Theatre.Play
     /// </summary>
     public static class PlanIconRenderer
     {
-        private const int IconSize = 96;
+        private const int IconSize = 128;
 
         // Number of pre-rendered angles making up one full rotation, and how
         // fast the icon appears to spin. Both are tuning knobs, not correctness
         // constraints — more frames costs more one-time render setup + memory
         // per unique plan, but yields a smoother spin.
-        private const int FrameCount = 24;
+        private const int FrameCount = 48;
         private const float DegreesPerSecond = 60f;
 
         // Far enough below the visible map that it's never in the main theatre
@@ -94,17 +94,21 @@ namespace Vanquish.Theatre.Play
                 // stays fixed relative to the stage while the model spins.
                 var modelRoot = new GameObject("Model");
                 modelRoot.transform.SetParent(stage.transform, false);
-                PlanPreviewBuilder.Build(modelRoot.transform, plan);
+                // Larger scale than PlanPreviewBuilder's own 0.6f default, and a
+                // tighter camera framing below — both push the model to fill the
+                // icon frame edge-to-edge instead of leaving a lot of empty margin
+                // around a small centered subject.
+                PlanPreviewBuilder.Build(modelRoot.transform, plan, scale: 0.95f);
 
                 var cameraGo = new GameObject("PlanIconCamera");
                 cameraGo.transform.SetParent(stage.transform, false);
-                cameraGo.transform.localPosition = new Vector3(0f, 0.32f, -0.85f);
-                cameraGo.transform.localRotation = Quaternion.LookRotation(new Vector3(0f, -0.32f, 0.85f), Vector3.up);
+                cameraGo.transform.localPosition = new Vector3(0f, 0.22f, -0.62f);
+                cameraGo.transform.localRotation = Quaternion.LookRotation(new Vector3(0f, -0.22f, 0.62f), Vector3.up);
 
                 var camera = cameraGo.AddComponent<Camera>();
                 camera.clearFlags = CameraClearFlags.SolidColor;
                 camera.backgroundColor = new Color(0f, 0f, 0f, 0f); // transparent — alpha written by the render texture below
-                camera.fieldOfView = 28f;
+                camera.fieldOfView = 30f;
                 camera.nearClipPlane = 0.05f;
                 camera.farClipPlane = 4f;
                 camera.enabled = false; // rendered manually below, once per frame

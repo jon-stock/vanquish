@@ -23,7 +23,25 @@ namespace Vanquish.Theatre.Play
         private bool _isOpen;
         private Vector2 _scroll;
 
-        private Rect PanelRect => new Rect((Screen.width - 440f) / 2f, (Screen.height - 440f) / 2f, 440f, 440f);
+        private const float PanelWidth = 440f;
+        private const float PanelMargin = 16f;
+
+        /// <summary>
+        /// Centered within the space above the bottom action bar (not the whole
+        /// screen) so it never overlaps <see cref="TheatreMapHarness.DrawBottomBar"/>
+        /// underneath it — clamped so it still fits on very short windows.
+        /// </summary>
+        private Rect PanelRect
+        {
+            get
+            {
+                float availableHeight = Mathf.Max(0f, Screen.height - TheatreMapHarness.BottomBarHeight);
+                float height = Mathf.Min(440f, Mathf.Max(0f, availableHeight - PanelMargin * 2f));
+                float x = (Screen.width - PanelWidth) / 2f;
+                float y = (availableHeight - height) / 2f;
+                return new Rect(x, y, PanelWidth, height);
+            }
+        }
 
         /// <summary>Included in TheatreMapHarness.IsPointerOverUI's coverage so the panel itself blocks click-through while open.</summary>
         public bool IsPointerOverPanel() => _isOpen && PanelRect.Contains(new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y));

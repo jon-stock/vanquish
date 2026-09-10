@@ -117,8 +117,8 @@ namespace Vanquish.Theatre.Play
             BuildMenu();
         }
 
-        /// <summary>Height of the bottom action bar (see <see cref="DrawBottomBar"/>) — used to stop world-space clicks/drags/scrolls "reaching through" the UI (see IsPointerOverUI).</summary>
-        private const float BottomBarHeight = 270f;
+        /// <summary>Height of the bottom action bar (see <see cref="DrawBottomBar"/>) — used to stop world-space clicks/drags/scrolls "reaching through" the UI (see IsPointerOverUI), and by <see cref="TechTreeController"/> to keep its modal panel from overlapping the bar.</summary>
+        public const float BottomBarHeight = 270f;
 
         /// <summary>
         /// True if the mouse cursor is currently over the bottom bar (or the pause
@@ -1830,7 +1830,7 @@ namespace Vanquish.Theatre.Play
 
         private static void EndCard() => GUILayout.EndVertical();
 
-        private const float PlanIconSize = 56f;
+        private const float PlanIconSize = 100f;
 
         /// <summary>A small rendered preview icon for a Plan (see <see cref="PlanIconRenderer"/>) — shown directly inside its card instead of a separate 3D model floating next to the building in world space.</summary>
         private static void DrawPlanIcon(DronePlan plan)
@@ -1956,7 +1956,7 @@ namespace Vanquish.Theatre.Play
 
             foreach (DronePlan plan in PlayerPlans)
             {
-                BeginCard(120f);
+                BeginCard(150f);
                 GUILayout.Label(plan.Name, Bold());
                 GUILayout.Label(plan.Category.ToString());
                 DrawPlanIcon(plan);
@@ -2041,7 +2041,7 @@ namespace Vanquish.Theatre.Play
 
             foreach (KeyValuePair<DronePlan, int> kv in StorageAt(warehouse).ToList())
             {
-                BeginCard(130f);
+                BeginCard(150f);
                 GUILayout.Label(kv.Key.Name, Bold());
                 GUILayout.Label($"{kv.Key.Category} x{kv.Value}");
                 DrawPlanIcon(kv.Key);
