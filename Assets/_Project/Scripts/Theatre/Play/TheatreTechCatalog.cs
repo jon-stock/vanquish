@@ -65,8 +65,13 @@ namespace Vanquish.Theatre.Play
         public static readonly string[] AirframeColumnOrder = { ColPropeller, ColBattery, ColAvionics, ColSignature, ColAirframe };
         public static readonly string[] MissileColumnOrder = { ColWarhead, ColGuidance, ColPropulsion, ColCountermeasure, ColMissile };
 
-        /// <summary>Node IDs already unlocked in every new game/save — the baseline airframe and missile architecture, always available without research (see TheatreMapHarness.Build/ApplySaveData).</summary>
-        public static readonly string[] DefaultUnlockedIds = { "airframe_quadcopter", "missile_tier1_unguided" };
+        /// <summary>Node IDs already unlocked in every new game/save — the baseline airframe/missile architecture and baseline sub-component parts, always available without research (see TheatreMapHarness.Build/ApplySaveData). Lets a fresh Lab immediately design a basic Quadcopter/Unguided Rocket using only baseline parts, per the tech tree's "Always Available" sub-component tier.</summary>
+        public static readonly string[] DefaultUnlockedIds =
+        {
+            "airframe_quadcopter", "missile_tier1_unguided",
+            "prop_oversized_props", "power_lipo_cells",
+            "warhead_shaped_charge", "mprop_solid_rocket",
+        };
 
         public static string[] ColumnsFor(TechGroup group) => group == TechGroup.Missile ? MissileColumnOrder : AirframeColumnOrder;
 
@@ -75,13 +80,13 @@ namespace Vanquish.Theatre.Play
             // =============================== AIRFRAME TAB ===============================
 
             // ---- Propeller & Rotor Tech (always-available sub-component upgrades) ----
-            new TheatreTechNode("prop_oversized_props", "Oversized Molded Propellers", "Cheap, bulky injection-molded propellers — the baseline lift solution.", 15, TechGroup.Airframe, ColPropeller, 1),
+            new TheatreTechNode("prop_oversized_props", "Oversized Molded Propellers", "Cheap, bulky injection-molded propellers — the baseline lift solution. Always available.", 0, TechGroup.Airframe, ColPropeller, 1),
             new TheatreTechNode("prop_carbon_blades", "Balanced Carbon Fiber Blades", "Lighter, stiffer blades for smoother, more efficient flight.", 25, TechGroup.Airframe, ColPropeller, 2, "prop_oversized_props"),
             new TheatreTechNode("prop_variable_pitch", "Variable-Pitch Propeller Hubs", "Adjustable blade pitch for finer thrust control and better range.", 45, TechGroup.Airframe, ColPropeller, 3, "prop_carbon_blades"),
             new TheatreTechNode("prop_low_rcs_rotors", "Low-RCS Composite Rotors", "Radar-attenuating rotor blades and hubs for stealthier flight.", 70, TechGroup.Airframe, ColPropeller, 4, "prop_variable_pitch"),
 
             // ---- Battery & Power Systems ----
-            new TheatreTechNode("power_lipo_cells", "High-Capacity LiPo Cells", "Standard lithium-polymer packs — the baseline power source.", 15, TechGroup.Airframe, ColBattery, 1),
+            new TheatreTechNode("power_lipo_cells", "High-Capacity LiPo Cells", "Standard lithium-polymer packs — the baseline power source. Always available.", 0, TechGroup.Airframe, ColBattery, 1),
             new TheatreTechNode("power_lihv_packs", "High-Voltage LiHV Smart Packs", "Higher-voltage cells with onboard telemetry for more usable capacity.", 25, TechGroup.Airframe, ColBattery, 2, "power_lipo_cells"),
             new TheatreTechNode("power_solid_state", "Solid-State Lithium Batteries", "Denser, safer solid-state cells for longer endurance.", 50, TechGroup.Airframe, ColBattery, 3, "power_lihv_packs"),
             new TheatreTechNode("power_microturbine", "Micro-Turbine Auxiliary Power", "Small turbine generator for extended-range hybrid power.", 75, TechGroup.Airframe, ColBattery, 4, "power_solid_state"),
@@ -108,7 +113,7 @@ namespace Vanquish.Theatre.Play
             // =============================== MISSILE TAB ===============================
 
             // ---- Warhead Tech ----
-            new TheatreTechNode("warhead_shaped_charge", "Shaped-Charge Warhead", "Focused explosive jet for penetrating armored targets.", 15, TechGroup.Missile, ColWarhead, 1),
+            new TheatreTechNode("warhead_shaped_charge", "Shaped-Charge Warhead", "Focused explosive jet for penetrating armored targets. Always available.", 0, TechGroup.Missile, ColWarhead, 1),
             new TheatreTechNode("warhead_frag_sleeve", "Fragmentation Sleeve", "Pre-fragmented casing for wider anti-personnel/soft-target lethality.", 25, TechGroup.Missile, ColWarhead, 2, "warhead_shaped_charge"),
             new TheatreTechNode("warhead_tandem_charge", "Tandem Shaped Charge", "A precursor charge to defeat reactive armor before the main charge.", 45, TechGroup.Missile, ColWarhead, 3, "warhead_frag_sleeve"),
             new TheatreTechNode("warhead_thermobaric", "Thermobaric Payload", "Fuel-air explosive payload for fortified/enclosed targets.", 70, TechGroup.Missile, ColWarhead, 4, "warhead_tandem_charge"),
@@ -120,7 +125,7 @@ namespace Vanquish.Theatre.Play
             new TheatreTechNode("guide_mmw_radar", "Millimeter-Wave Radar Seeker", "All-weather active radar terminal seeker.", 75, TechGroup.Missile, ColGuidance, 4, "guide_gps_ins"),
 
             // ---- Propulsion Tech ----
-            new TheatreTechNode("mprop_solid_rocket", "Solid Rocket Motor", "Single-burn solid-fuel booster — the baseline missile motor.", 15, TechGroup.Missile, ColPropulsion, 1),
+            new TheatreTechNode("mprop_solid_rocket", "Solid Rocket Motor", "Single-burn solid-fuel booster — the baseline missile motor. Always available.", 0, TechGroup.Missile, ColPropulsion, 1),
             new TheatreTechNode("mprop_dual_pulse", "Dual-Pulse Rocket Motor", "A second burn stage for extended terminal energy/range.", 30, TechGroup.Missile, ColPropulsion, 2, "mprop_solid_rocket"),
             new TheatreTechNode("mprop_ramjet", "Air-Breathing Ramjet", "Sustained air-breathing cruise for much longer powered range.", 55, TechGroup.Missile, ColPropulsion, 3, "mprop_dual_pulse"),
             new TheatreTechNode("mprop_scramjet", "Scramjet Booster", "Supersonic-combustion ramjet for hypersonic sustained flight.", 90, TechGroup.Missile, ColPropulsion, 4, "mprop_ramjet"),

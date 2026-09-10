@@ -92,7 +92,8 @@ namespace Vanquish.Theatre.Play
         }
 
         private static string CacheKey(DronePlan plan) =>
-            $"{plan.Name}|{plan.Category}|{ColorUtility.ToHtmlStringRGBA(plan.AccentColor)}";
+            $"{plan.Name}|{plan.Category}|{ColorUtility.ToHtmlStringRGBA(plan.AccentColor)}|" +
+            $"{plan.PropellerId}|{plan.BatteryId}|{plan.WarheadId}|{plan.GuidanceId}|{plan.PropulsionId}";
 
         // Camera elevation above the horizontal plane, and how much breathing
         // room to leave around the model's bounding sphere so it doesn't touch

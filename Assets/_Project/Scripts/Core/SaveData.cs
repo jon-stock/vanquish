@@ -101,6 +101,17 @@ namespace Vanquish.Core
     {
         public string name;
         public string category;
+
+        // Selected part ids from the Design window (see Theatre.Play.PlanPartCatalog).
+        // Quadcopter/Hexacopter use propellerId/batteryId; Missile uses warheadId/
+        // guidanceId/propulsionId. Empty/null for a slot not used by this Plan's
+        // category, or for saves predating the design system (DronePlan.ApplyDesign
+        // falls back to each slot's baseline part id in that case).
+        public string propellerId;
+        public string batteryId;
+        public string warheadId;
+        public string guidanceId;
+        public string propulsionId;
     }
 
     [Serializable]

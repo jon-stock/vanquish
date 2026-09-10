@@ -981,6 +981,31 @@ namespace Vanquish.EditorTools
                 Expect(GameObject.Find("PlanIconStage_" + falcon.Name) == null, "The icon-rendering stage/camera should be torn down after rendering, not left in the scene");
                 Expect(ReferenceEquals(PlanIconRenderer.GetOrCreateIcon(falcon), falconIcon), "A second call for the same plan should reuse the cached icon, not render a new one");
 
+                // --- Design window: part selection, derived stats, and in-place editing ---
+                Expect(falcon.PropellerId == "prop_oversized_props" && falcon.BatteryId == "power_lipo_cells",
+                    $"A plan created without explicit parts should default to the baseline Propeller/Battery, got {falcon.PropellerId}/{falcon.BatteryId}");
+                float baselineWeight = falcon.WeightKg;
+                float baselineSpeed = falcon.SpeedKph;
+
+                Expect(harness.TryUpdatePlan(falcon, "Falcon", "prop_low_rcs_rotors", "power_microturbine", null, null, null, out string updateErr),
+                    $"Updating a plan's parts should succeed, got error: {updateErr}");
+                Expect(falcon.PropellerId == "prop_low_rcs_rotors" && falcon.BatteryId == "power_microturbine",
+                    "ApplyDesign should update the plan's part ids in place");
+                Expect(falcon.WeightKg != baselineWeight, "Changing parts should change the plan's derived WeightKg");
+                Expect(falcon.SpeedKph > baselineSpeed, "Low-RCS rotors + a micro-turbine should be faster than the baseline propeller/battery");
+
+                Texture2D falconIconAfterEdit = PlanIconRenderer.GetOrCreateIcon(falcon);
+                Expect(!ReferenceEquals(falconIconAfterEdit, falconIcon), "Changing a plan's parts should invalidate its cached icon (different cache key) rather than reusing the old rendered frames");
+
+                Expect(!harness.TryCreatePlanWithParts("Falcon", UnitCategory.Quadcopter, null, null, null, null, null, out string dupErr),
+                    "TryCreatePlanWithParts should still enforce name uniqueness");
+                Expect(dupErr != null, "Duplicate-name rejection via TryCreatePlanWithParts should include an error message");
+
+                Expect(harness.TryCreatePlanWithParts("Hawk", UnitCategory.Missile, null, null, "warhead_shaped_charge", "guide_none", "mprop_solid_rocket", out string hawkErr),
+                    $"Creating a missile plan with explicit parts should succeed, got error: {hawkErr}");
+                DronePlan hawk = harness.PlayerPlans.First(p => p.Name == "Hawk");
+                Expect(hawk.PayloadKg > 0f, "A missile plan's PayloadKg should reflect its selected Warhead");
+
                 // --- Queue production at the seeded Player factory ---
                 Site playerFactory = harness.World.Sites.First(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.Factory);
                 Site playerWarehouse = harness.World.Sites.First(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.Warehouse);

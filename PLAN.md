@@ -760,11 +760,47 @@ all turn-based, feeding into and out of combat instances.
       unlocked node IDs via the already-reserved `SaveData.unlockedTechNodeIds`
       slot. The baseline Quadcopter airframe and Unguided Rocket missile
       (`TheatreTechCatalog.DefaultUnlockedIds`) are always unlocked, no research
-      needed. **Not yet done**: this
-      is still a POC design system (name + category + color only) — not the full
-      modular part-composition design system the combat-instance side already has
-      (real stats, payload/hardness tradeoffs); and unlocking a tech node tracks
-      progress only — it doesn't yet grant any real `PartDefinition`/unit bonus
+      needed.
+
+      The Lab's old inline "name + category buttons" card is gone — a **Design**
+      window (`DesignController`, same modal pattern as `TechTreeController`) now
+      opens from "New Design"/each Plan's "Edit" button. `DronePlan` is a real (if
+      still simplified) part-composition design rather than name+category+color
+      only: a Quadcopter/Hexacopter picks a **Propeller** + **Battery**; a Missile
+      picks a **Warhead** + **Guidance** + **Propulsion** (`PlanPartCatalog`) — each
+      slot's options are gated on the same tech-tree unlocks the Tech Tree modal
+      tracks (`TheatreMapHarness.IsTechUnlocked`), with one baseline option per slot
+      always available for free (`prop_oversized_props`/`power_lipo_cells`/
+      `warhead_shaped_charge`/`guide_none`/`mprop_solid_rocket` —
+      `TheatreTechCatalog.DefaultUnlockedIds`) so a basic design is possible from
+      turn one, matching the tech tree's "Always Available" sub-component tier.
+      Each part option carries flat weight/speed/range/payload bonuses that
+      `DronePlan.WeightKg`/`SpeedKph`/`RangeKm`/`PayloadKg` sum on top of a
+      category's base hull stats, shown live in the Design window next to a
+      rotating preview icon of the in-progress design. Parts also drive the actual
+      rendered model, not just stats: `Combat.Play.DroneVisualBuilder.Build` gained
+      optional `bladeColor`/`bladeSizeMultiplier`/`batteryColor`/
+      `batterySizeMultiplier` parameters (real combat-instance drones, which have no
+      Plan, simply omit them and get the old defaults), and `PlanPreviewBuilder`'s
+      missile preview is now nose (tinted by Warhead) + body (length/color from
+      Propulsion) + optional tail fins (tinted by Guidance, omitted for an unguided
+      design) instead of one plain capsule — so two Plans that only differ by parts
+      now look different everywhere their icon appears, which is also why
+      `PlanIconRenderer`'s cache key now includes every part id. `DronePlan` is
+      mutable (`ApplyDesign`) specifically so the Design window can edit an
+      existing, already-referenced-elsewhere Plan (production queues/storage/army
+      composition) in place rather than needing to replace it; `TryUpdatePlan`
+      re-validates name uniqueness against every *other* Plan. Part selections
+      persist through save/load (`SavedPlan.propellerId`/`batteryId`/`warheadId`/
+      `guidanceId`/`propulsionId`). **Not yet done**: category can't be changed once
+      a Plan is created (parts differ entirely per category, so this is treated as
+      a new design); there's no delete-a-design action; and a part's stat bonuses
+      are still simple flat additions authored directly on `PlanPartOption` rather
+      than routed through the richer `Data.PartDefinition`/`MissilePayloadDefinition`
+      model the combat-instance side already has (real payload/hardness tradeoffs) —
+      unlocking a tech node still tracks progress only for the composite airframe/
+      missile-evolution tiers (Hexacopter, MALE/HALE, CCA, etc.) — it doesn't yet
+      grant any real bonus beyond what a design's own selected parts already give it
       (the panel says so explicitly rather than silently ignoring it). Produced/stored inventory now
       does feed into a real `Combat.Stockpile` once deployed into an army and moved
       into a fight — see the site-storage/field-army item below. **Personnel system**

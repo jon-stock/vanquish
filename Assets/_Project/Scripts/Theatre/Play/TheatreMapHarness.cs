@@ -66,8 +66,6 @@ namespace Vanquish.Theatre.Play
         /// <summary>Counts staged (but not yet submitted) for the "Deploy Army" panel at the currently selected Airfield — cleared whenever the selected hex changes.</summary>
         private readonly Dictionary<DronePlan, int> _pendingDeployment = new Dictionary<DronePlan, int>();
 
-        private string _planNameInput = "";
-        private string _planFeedback;
         private string _combatFeedback;
 
         /// <summary>IDs of every <see cref="TheatreTechNode"/> the player has unlocked at the Lab's Tech Tree panel — see <see cref="TryUnlockTech"/>.</summary>
@@ -140,11 +138,15 @@ namespace Vanquish.Theatre.Play
             if (_menu != null && _menu.IsPointerOverMenu())
                 return true;
 
-            return _techTree != null && _techTree.IsPointerOverPanel();
+            if (_techTree != null && _techTree.IsPointerOverPanel())
+                return true;
+
+            return _designWindow != null && _designWindow.IsPointerOverPanel();
         }
 
         private GameMenuController _menu;
         private TechTreeController _techTree;
+        private DesignController _designWindow;
 
         private void BuildLight()
         {
@@ -282,6 +284,12 @@ namespace Vanquish.Theatre.Play
             var techTree = techTreeGo.AddComponent<TechTreeController>();
             techTree.harness = this;
             _techTree = techTree;
+
+            var designGo = new GameObject("DesignWindow");
+            designGo.transform.SetParent(transform, worldPositionStays: true);
+            var designWindow = designGo.AddComponent<DesignController>();
+            designWindow.harness = this;
+            _designWindow = designWindow;
         }
 
         // ---- Tech tree -------------------------------------------------------
@@ -685,6 +693,72 @@ namespace Vanquish.Theatre.Play
 
             Color accent = PlanAccentPalette[PlayerPlans.Count % PlanAccentPalette.Length];
             PlayerPlans.Add(new DronePlan(name, category, accent));
+
+            error = null;
+            return true;
+        }
+
+        /// <summary>
+        /// Saves a new Plan with explicit part selections — the Design window's
+        /// (<see cref="DesignController"/>) full "design, save" flow, as opposed to
+        /// <see cref="TryCreatePlan"/>'s baseline-parts-only convenience overload.
+        /// Same name-uniqueness/Lab-selection validation as <see cref="TryCreatePlan"/>.
+        /// </summary>
+        public bool TryCreatePlanWithParts(string name, UnitCategory category,
+            string propellerId, string batteryId, string warheadId, string guidanceId, string propulsionId,
+            out string error)
+        {
+            if (!CanDesignPlanAtSelectedTile())
+            {
+                error = "Select an operational Lab you own first.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                error = "Plans need a name.";
+                return false;
+            }
+
+            if (PlayerPlans.Any(p => p.Name.Equals(name, System.StringComparison.OrdinalIgnoreCase)))
+            {
+                error = $"A plan named '{name}' already exists.";
+                return false;
+            }
+
+            Color accent = PlanAccentPalette[PlayerPlans.Count % PlanAccentPalette.Length];
+            PlayerPlans.Add(new DronePlan(name, category, accent, propellerId, batteryId, warheadId, guidanceId, propulsionId));
+
+            error = null;
+            return true;
+        }
+
+        /// <summary>
+        /// Updates an already-saved Plan's name/parts in place (<see cref="DronePlan.ApplyDesign"/>)
+        /// — the Design window's "edit an existing design" flow. Renaming still
+        /// enforces uniqueness against every *other* Plan (not itself).
+        /// </summary>
+        public bool TryUpdatePlan(DronePlan plan, string name, string propellerId, string batteryId, string warheadId, string guidanceId, string propulsionId, out string error)
+        {
+            if (plan == null || !PlayerPlans.Contains(plan))
+            {
+                error = "That plan no longer exists.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                error = "Plans need a name.";
+                return false;
+            }
+
+            if (PlayerPlans.Any(p => p != plan && p.Name.Equals(name, System.StringComparison.OrdinalIgnoreCase)))
+            {
+                error = $"A plan named '{name}' already exists.";
+                return false;
+            }
+
+            plan.ApplyDesign(name, propellerId, batteryId, warheadId, guidanceId, propulsionId);
 
             error = null;
             return true;
@@ -1413,7 +1487,18 @@ namespace Vanquish.Theatre.Play
             }
 
             foreach (DronePlan plan in PlayerPlans)
-                data.plans.Add(new SavedPlan { name = plan.Name, category = plan.Category.ToString() });
+            {
+                data.plans.Add(new SavedPlan
+                {
+                    name = plan.Name,
+                    category = plan.Category.ToString(),
+                    propellerId = plan.PropellerId,
+                    batteryId = plan.BatteryId,
+                    warheadId = plan.WarheadId,
+                    guidanceId = plan.GuidanceId,
+                    propulsionId = plan.PropulsionId,
+                });
+            }
 
             foreach (KeyValuePair<Site, List<ProductionOrder>> queueEntry in _productionQueues)
             {
@@ -1543,7 +1628,8 @@ namespace Vanquish.Theatre.Play
                     continue;
 
                 Color accent = PlanAccentPalette[PlayerPlans.Count % PlanAccentPalette.Length];
-                PlayerPlans.Add(new DronePlan(saved.name, category, accent));
+                PlayerPlans.Add(new DronePlan(saved.name, category, accent,
+                    saved.propellerId, saved.batteryId, saved.warheadId, saved.guidanceId, saved.propulsionId));
             }
 
             foreach (SavedSiteStorage saved in data.siteStorage)
@@ -1941,19 +2027,12 @@ namespace Vanquish.Theatre.Play
 
         private void DrawLabCards()
         {
-            BeginCard(190f);
-            GUILayout.Label("DESIGN PLAN", Bold());
-            _planNameInput = GUILayout.TextField(_planNameInput);
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Quad", GUILayout.Width(48)))
-                SubmitPlan(UnitCategory.Quadcopter);
-            if (GUILayout.Button("Hex", GUILayout.Width(42)))
-                SubmitPlan(UnitCategory.Hexacopter);
-            if (GUILayout.Button("Msl", GUILayout.Width(42)))
-                SubmitPlan(UnitCategory.Missile);
-            GUILayout.EndHorizontal();
-            if (!string.IsNullOrEmpty(_planFeedback))
-                GUILayout.Label(_planFeedback, Italic());
+            BeginCard(150f);
+            GUILayout.Label("DESIGN", Bold());
+            GUILayout.Label("Create or edit a UAV/missile design.", Italic());
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("New Design"))
+                _designWindow.OpenForNew();
             EndCard();
 
             BeginCard(150f);
@@ -1970,16 +2049,11 @@ namespace Vanquish.Theatre.Play
                 GUILayout.Label(plan.Name, Bold());
                 GUILayout.Label(plan.Category.ToString());
                 DrawPlanIcon(plan);
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button("Edit"))
+                    _designWindow.OpenForEdit(plan);
                 EndCard();
             }
-        }
-
-        private void SubmitPlan(UnitCategory category)
-        {
-            bool ok = TryCreatePlan(_planNameInput, category, out string error);
-            _planFeedback = ok ? $"Saved '{_planNameInput}' ({category})." : error;
-            if (ok)
-                _planNameInput = "";
         }
 
         private static string DescribeSite(Site site) => $"{SiteBuildCatalog.DisplayName(site.Type)} {site.Location}";
