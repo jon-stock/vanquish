@@ -78,8 +78,28 @@ namespace Vanquish.Theatre.Play
             Cache.Clear();
         }
 
+        /// <summary>Combined world-space bounds of every renderer under <paramref name="root"/> — used to auto-frame the icon camera regardless of a plan's actual model size/shape.</summary>
+        private static Bounds ComputeBounds(GameObject root)
+        {
+            Renderer[] renderers = root.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0)
+                return new Bounds(root.transform.position, Vector3.one * 0.1f);
+
+            Bounds bounds = renderers[0].bounds;
+            for (int i = 1; i < renderers.Length; i++)
+                bounds.Encapsulate(renderers[i].bounds);
+            return bounds;
+        }
+
         private static string CacheKey(DronePlan plan) =>
             $"{plan.Name}|{plan.Category}|{ColorUtility.ToHtmlStringRGBA(plan.AccentColor)}";
+
+        // Camera elevation above the horizontal plane, and how much breathing
+        // room to leave around the model's bounding sphere so it doesn't touch
+        // the frame edges — both fixed regardless of a plan's actual size/shape.
+        private const float CameraElevationDegrees = 22f;
+        private const float FramingMargin = 1.3f;
+        private const float FieldOfView = 30f;
 
         private static Texture2D[] RenderFrames(DronePlan plan)
         {
@@ -94,23 +114,37 @@ namespace Vanquish.Theatre.Play
                 // stays fixed relative to the stage while the model spins.
                 var modelRoot = new GameObject("Model");
                 modelRoot.transform.SetParent(stage.transform, false);
-                // Larger scale than PlanPreviewBuilder's own 0.6f default, and a
-                // tighter camera framing below — both push the model to fill the
-                // icon frame edge-to-edge instead of leaving a lot of empty margin
-                // around a small centered subject.
-                PlanPreviewBuilder.Build(modelRoot.transform, plan, scale: 0.95f);
+                GameObject preview = PlanPreviewBuilder.Build(modelRoot.transform, plan);
+
+                // Recenter the preview so its visual bounding-box center sits
+                // exactly at modelRoot's origin — since modelRoot is what gets
+                // rotated per frame below, this makes it spin in place around
+                // its own center instead of orbiting off-axis (which would
+                // otherwise happen for any model whose geometry isn't already
+                // symmetric around its root transform).
+                Bounds bounds = ComputeBounds(preview);
+                preview.transform.position -= bounds.center - modelRoot.transform.position;
+
+                // Frame the camera to fit the model's whole bounding sphere
+                // (computed from its actual size, not a fixed distance/scale) so
+                // the entire drone/missile is always visible and centered,
+                // regardless of which plan category is being rendered.
+                float radius = Mathf.Max(0.05f, bounds.extents.magnitude);
+                float distance = (radius * FramingMargin) / Mathf.Sin(FieldOfView * 0.5f * Mathf.Deg2Rad);
+                float elevationRad = CameraElevationDegrees * Mathf.Deg2Rad;
+                Vector3 cameraDirection = new Vector3(0f, Mathf.Sin(elevationRad), -Mathf.Cos(elevationRad)).normalized;
 
                 var cameraGo = new GameObject("PlanIconCamera");
                 cameraGo.transform.SetParent(stage.transform, false);
-                cameraGo.transform.localPosition = new Vector3(0f, 0.22f, -0.62f);
-                cameraGo.transform.localRotation = Quaternion.LookRotation(new Vector3(0f, -0.22f, 0.62f), Vector3.up);
+                cameraGo.transform.localPosition = modelRoot.transform.localPosition + cameraDirection * distance;
+                cameraGo.transform.localRotation = Quaternion.LookRotation(-cameraDirection, Vector3.up);
 
                 var camera = cameraGo.AddComponent<Camera>();
                 camera.clearFlags = CameraClearFlags.SolidColor;
                 camera.backgroundColor = new Color(0f, 0f, 0f, 0f); // transparent — alpha written by the render texture below
-                camera.fieldOfView = 30f;
+                camera.fieldOfView = FieldOfView;
                 camera.nearClipPlane = 0.05f;
-                camera.farClipPlane = 4f;
+                camera.farClipPlane = distance + radius * 4f;
                 camera.enabled = false; // rendered manually below, once per frame
 
                 renderTexture = new RenderTexture(IconSize, IconSize, 16, RenderTextureFormat.ARGB32);
