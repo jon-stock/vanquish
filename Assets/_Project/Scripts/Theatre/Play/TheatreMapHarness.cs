@@ -115,6 +115,9 @@ namespace Vanquish.Theatre.Play
 
             BuildCamera();
             BuildMenu();
+
+            // The base Quadcopter airframe is always available — no research needed.
+            _unlockedTechIds.Add(TheatreTechCatalog.DefaultUnlockedId);
         }
 
         /// <summary>Height of the bottom action bar (see <see cref="DrawBottomBar"/>) — used to stop world-space clicks/drags/scrolls "reaching through" the UI (see IsPointerOverUI), and by <see cref="TechTreeController"/> to keep its modal panel from overlapping the bar.</summary>
@@ -1611,6 +1614,10 @@ namespace Vanquish.Theatre.Play
             _unlockedTechIds.Clear();
             foreach (string techId in data.unlockedTechNodeIds)
                 _unlockedTechIds.Add(techId);
+            // Defensive: older saves predating the tech tree won't have this in their
+            // unlockedTechNodeIds list, but the base Quadcopter airframe should always
+            // be available regardless of when the save was made.
+            _unlockedTechIds.Add(TheatreTechCatalog.DefaultUnlockedId);
 
             _territorialCondition.RestoreConsecutiveTurns(TheatreFaction.Player, data.playerTerritorialSustainTurns);
             _territorialCondition.RestoreConsecutiveTurns(TheatreFaction.Enemy, data.enemyTerritorialSustainTurns);

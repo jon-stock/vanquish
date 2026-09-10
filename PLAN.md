@@ -736,13 +736,21 @@ all turn-based, feeding into and out of combat instances.
       whichever frame matches the current time so the icon appears to spin in
       place wherever it's drawn, without re-rendering the 3D preview every OnGUI
       frame. An Operational, owned Lab also has a **Tech Tree** card that opens a
-      modal browser (`TechTreeController`) listing `TheatreTechCatalog`'s flat,
-      hardcoded node list (a placeholder catalog — no `Data.TechTree.TechNode`
-      ScriptableObject assets exist in this project yet) with prerequisite-gated
-      Unlock buttons, spending a per-faction research point pool
-      (`TheatreTurnController.ResearchPool`, fed 10/turn per Operational Lab —
-      `ResearchPerOperationalLabPerTurn`) and persisting unlocked node IDs via the
-      already-reserved `SaveData.unlockedTechNodeIds` slot. **Not yet done**: this
+      modal (`TechTreeController`) rendering `TheatreTechCatalog`'s ~21 hardcoded
+      nodes (a placeholder catalog — no `Data.TechTree.TechNode` ScriptableObject
+      assets exist in this project yet) as an actual node-and-line tree, not a flat
+      list: one column per sub-component branch (Propeller/Rotor, Battery/Power,
+      Avionics/Autonomy, Signature/Survivability), simple techs at the top of each
+      column and more complicated ones deeper down via a linear prerequisite chain,
+      plus a rightmost Airframe Evolution column (Quadcopter — always unlocked —
+      → Hexacopter → MALE/HALE Fixed-Wing → Collaborative Combat Aircraft) whose
+      tiers cross-link back to specific nodes in the other columns, drawn with a
+      runtime line-drawing helper (rotated `GUI.DrawTexture`, no `UnityEditor.Handles`
+      dependency). Unlock buttons are prerequisite-gated, spend a per-faction
+      research point pool (`TheatreTurnController.ResearchPool`, fed 10/turn per
+      Operational Lab — `ResearchPerOperationalLabPerTurn`), and persist unlocked
+      node IDs via the already-reserved `SaveData.unlockedTechNodeIds` slot.
+      **Not yet done**: this
       is still a POC design system (name + category + color only) — not the full
       modular part-composition design system the combat-instance side already has
       (real stats, payload/hardness tradeoffs); and unlocking a tech node tracks
