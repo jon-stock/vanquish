@@ -116,12 +116,14 @@ namespace Vanquish.Theatre.Play
             BuildCamera();
             BuildMenu();
 
-            // The base Quadcopter airframe is always available — no research needed.
-            _unlockedTechIds.Add(TheatreTechCatalog.DefaultUnlockedId);
+            // The baseline Quadcopter airframe and Unguided Rocket missile are always
+            // available — no research needed.
+            foreach (string techId in TheatreTechCatalog.DefaultUnlockedIds)
+                _unlockedTechIds.Add(techId);
         }
 
         /// <summary>Height of the bottom action bar (see <see cref="DrawBottomBar"/>) — used to stop world-space clicks/drags/scrolls "reaching through" the UI (see IsPointerOverUI), and by <see cref="TechTreeController"/> to keep its modal panel from overlapping the bar.</summary>
-        public const float BottomBarHeight = 270f;
+        public const float BottomBarHeight = 230f;
 
         /// <summary>
         /// True if the mouse cursor is currently over the bottom bar (or the pause
@@ -1614,10 +1616,11 @@ namespace Vanquish.Theatre.Play
             _unlockedTechIds.Clear();
             foreach (string techId in data.unlockedTechNodeIds)
                 _unlockedTechIds.Add(techId);
-            // Defensive: older saves predating the tech tree won't have this in their
-            // unlockedTechNodeIds list, but the base Quadcopter airframe should always
-            // be available regardless of when the save was made.
-            _unlockedTechIds.Add(TheatreTechCatalog.DefaultUnlockedId);
+            // Defensive: older saves predating the tech tree won't have these in their
+            // unlockedTechNodeIds list, but the baseline airframe/missile should
+            // always be available regardless of when the save was made.
+            foreach (string techId in TheatreTechCatalog.DefaultUnlockedIds)
+                _unlockedTechIds.Add(techId);
 
             _territorialCondition.RestoreConsecutiveTurns(TheatreFaction.Player, data.playerTerritorialSustainTurns);
             _territorialCondition.RestoreConsecutiveTurns(TheatreFaction.Enemy, data.enemyTerritorialSustainTurns);

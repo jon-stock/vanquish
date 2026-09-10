@@ -736,21 +736,31 @@ all turn-based, feeding into and out of combat instances.
       whichever frame matches the current time so the icon appears to spin in
       place wherever it's drawn, without re-rendering the 3D preview every OnGUI
       frame. An Operational, owned Lab also has a **Tech Tree** card that opens a
-      modal (`TechTreeController`) rendering `TheatreTechCatalog`'s ~21 hardcoded
+      modal (`TechTreeController`) rendering `TheatreTechCatalog`'s ~34 hardcoded
       nodes (a placeholder catalog — no `Data.TechTree.TechNode` ScriptableObject
       assets exist in this project yet) as an actual node-and-line tree, not a flat
-      list: one column per sub-component branch (Propeller/Rotor, Battery/Power,
-      Avionics/Autonomy, Signature/Survivability), simple techs at the top of each
-      column and more complicated ones deeper down via a linear prerequisite chain,
-      plus a rightmost Airframe Evolution column (Quadcopter — always unlocked —
-      → Hexacopter → MALE/HALE Fixed-Wing → Collaborative Combat Aircraft) whose
-      tiers cross-link back to specific nodes in the other columns, drawn with a
-      runtime line-drawing helper (rotated `GUI.DrawTexture`, no `UnityEditor.Handles`
-      dependency). Unlock buttons are prerequisite-gated, spend a per-faction
-      research point pool (`TheatreTurnController.ResearchPool`, fed 10/turn per
-      Operational Lab — `ResearchPerOperationalLabPerTurn`), and persist unlocked
-      node IDs via the already-reserved `SaveData.unlockedTechNodeIds` slot.
-      **Not yet done**: this
+      list, across two tabs (`TechGroup.Airframe`/`TechGroup.Missile`): one column
+      per sub-component branch (Airframe tab: Propeller/Rotor, Battery/Power,
+      Avionics/Autonomy, Signature/Survivability; Missile tab: Warhead, Guidance/
+      Seekers, Propulsion, Countermeasures), simple techs at the top of each column
+      and more complicated ones deeper down via a linear prerequisite chain, plus a
+      rightmost evolution column per tab (Quadcopter → Hexacopter → MALE/HALE
+      Fixed-Wing → Collaborative Combat Aircraft; Unguided Rocket → Laser-Guided →
+      Standoff Precision-Guided → Hypersonic Glide) whose tiers cross-link back to
+      specific nodes in the other columns — drawn with right-angle elbow connectors
+      (down/across/down, not a straight diagonal) via a runtime line-drawing helper
+      (rotated `GUI.DrawTexture`, no `UnityEditor.Handles` dependency) so
+      cross-column dependencies stay legible instead of crisscrossing. The whole
+      panel is laid out with absolute `Rect` math rather than `GUILayout`, since
+      `GUILayout`'s two-pass Layout/Repaint sizing was unreliable for a wrapped
+      description label sized just before the node grid below it (it intermittently
+      clipped the first row). Unlock buttons are prerequisite-gated, spend a
+      per-faction research point pool (`TheatreTurnController.ResearchPool`, fed
+      10/turn per Operational Lab — `ResearchPerOperationalLabPerTurn`), and persist
+      unlocked node IDs via the already-reserved `SaveData.unlockedTechNodeIds`
+      slot. The baseline Quadcopter airframe and Unguided Rocket missile
+      (`TheatreTechCatalog.DefaultUnlockedIds`) are always unlocked, no research
+      needed. **Not yet done**: this
       is still a POC design system (name + category + color only) — not the full
       modular part-composition design system the combat-instance side already has
       (real stats, payload/hardness tradeoffs); and unlocking a tech node tracks
