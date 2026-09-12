@@ -42,6 +42,9 @@ namespace Vanquish.Theatre.Play
         private float _distance;
         private float _targetDistance;
 
+        /// <summary>Current horizontal orbit angle (degrees) — read by the map's compass widget so it can counter-rotate and always point to true north.</summary>
+        public float Yaw => _yaw;
+
         private void Start()
         {
             // Derive the initial yaw/pitch/distance from wherever the harness placed

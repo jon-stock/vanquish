@@ -73,6 +73,43 @@ If `Assets/_Project/Scripts/**` fails to compile in a way that looks stale/wrong
 — Unity's cached asset database can lag behind manual file moves done outside the
 Editor.
 
+### Moving specific assets beyond "fully procedural" (art pipeline, experimental)
+
+Every visual in this project (drones, missiles, hex tiles, site buildings) is
+built procedurally from Unity primitives at runtime, colored with a flat
+`material.color` — no imported textures/meshes anywhere (see `SiteVisualBuilder`/
+`DroneVisualBuilder`/`HexMeshFactory`). That was a convention, not a hard
+constraint from the project owner — real (hand-drawn or AI-generated) textures
+are welcome for specific assets when asked for, starting experimentally with the
+quadcopter.
+
+The workflow for that: `Assets/_Project/Scripts/Editor/ObjExporter.cs` is a
+generic Wavefront OBJ/MTL exporter for any GameObject hierarchy (every
+`MeshFilter` becomes its own named `o` group — e.g. frame/arms kept separate
+rather than fused into one blob — vertices baked into the export root's local
+space, MTL colors sampled from each part's current placeholder color as a
+rough paint-by-numbers reference). `QuadcopterWireframeExporter.cs` uses it via
+**Vanquish > Export Quadcopter Wireframe (OBJ)** in the Editor menu (or
+`-executeMethod Vanquish.EditorTools.QuadcopterWireframeExporter.
+ExportQuadcopter` in batch mode) to build `DroneVisualBuilder.
+BuildStaticAirframeForExport` — the static airframe only (frame/arms/legs/
+camera/battery), deliberately excluding motors/rotor blades — and write it to
+`Assets/_Project/Art/Resources/Models/Quadcopter.obj` (+ `.mtl`), which is
+*also* the live asset `DroneVisualBuilder.Build` now instantiates in-game for
+every Quadcopter (via `Resources.Load`, so it works in both the Editor and real
+builds) instead of the old procedural body — motors and spinning rotor blades
+are always still built procedurally on top of it (`BuildRotor`/`RotorSpinner`),
+never imported, since a plain OBJ export has no per-part pivots/animation to
+carry (every vertex bakes into one shared root space, and Unity's importer
+further merges every part into a single combined mesh) — importing the rotors
+too would make them static and stop spinning. Replace
+`Assets/_Project/Art/Resources/Models/Quadcopter.obj` directly (same path) once
+real textured art exists — no code changes needed for that swap. Same exporter
+pattern (`ObjExporter.Export(root, path)`) is reusable for any other asset that
+needs the same treatment later (a building via `SiteVisualBuilder`, missiles,
+etc.) — just build it in an Editor script and call the exporter, no need to
+duplicate the OBJ-writing logic.
+
 ### Interactive debug harness (press Play and click things)
 
 There's no real gameplay scene yet (no flight/spawning/UI), but there is a
@@ -124,37 +161,146 @@ of procedurally-meshed hexes (`HexMeshFactory` — no imported art, same convent
 the drone visuals), 50 hexes per side, colored by terrain (open/road/mountain,
 mountains rendered taller) and by owner (blue Player / red Enemy), with a road cutting
 across the middle and a couple of mountain flanks for terrain variety. Two factories
-and two bases per
-side are rendered as simple colored markers. WASD or left-click-drag pans the camera,
-right-click-drag orbits/rotates it, scroll zooms (smoothly — eases toward the target
-distance rather than snapping), and clicking a hex without dragging selects it (shows
-its terrain/owner/site in the corner panel) — if the
-selected hex is adjacent to Player territory, a "Capture this hex for Player" button
-appears (a simple stand-in for "won a combat instance here" until the real combat-
-instance-to-theatre feedback loop exists). "Advance Turn" ticks site construction/
-production and checks both victory conditions (economic collapse, sustained
-territorial control) live.
+and two bases per side are rendered as distinct procedural silhouettes (see
+`SiteVisualBuilder`, below) rather than plain markers. WASD or left-click-drag pans
+the camera, right-click-drag orbits/rotates it, scroll zooms (smoothly — eases toward
+the target distance rather than snapping).
 
-Owned empty hexes also get a **"Build here"** menu (`SiteBuildCatalog`: Factory,
-Warehouse, Base, Airstrip, Radar Installation, Recon Station, Lab — each with a turn
+The UI is deliberately split into two lightweight pieces rather than one always-open
+panel dumping everything at once: hovering the mouse over a hex/site/army (no click)
+shows a small tooltip with just the basics (`TheatreMapHarness.DrawHoverTooltip`) —
+e.g. an army's name/rank, or a site's type/owner and a one-line hint at what clicking
+it opens; clicking selects it and populates a fixed **bottom action bar**
+(`TheatreMapHarness.DrawBottomBar`) with one card per relevant action/unit, plus the
+turn counter/resources and an "END TURN" button that live on the bar's right side at
+all times. The selected hex (or a selected army's hex) also gets a strong orange glow
+(`HexTileView.SetSelected`) distinct from the (yellow) move-destination highlight
+described below, so it's always obvious what's currently open — if the selected hex
+is adjacent to Player territory, a "Capture" button appears in its info line (a
+simple stand-in for "won a combat instance here" until the real combat-instance-to-
+theatre feedback loop exists). "END TURN" ticks site construction/production and
+checks both victory conditions (economic collapse, sustained territorial control)
+live.
+
+Owned empty hexes get a row of **build cards** (`SiteBuildCatalog`: Factory,
+Warehouse, Base, Airfield, Radar Installation, Recon Station, Lab — each with a turn
 cost), blocked on Mountain/Road terrain or an already-occupied hex. Selecting an
-**Operational, owned Lab** opens a design panel: name a new Plan (must be non-empty
-and unique) and pick Quadcopter/Hexacopter/Missile — designed Plans get an actual 3D
-preview model next to the Lab (`PlanPreviewBuilder`, reusing `Combat/Play/
-DroneVisualBuilder` for quad/hex plans), not just a name in a list. Selecting an
-**Operational, owned Factory** opens a production panel listing every designed Plan
-with a "Build (Nt)" button; queued orders tick down via the normal Advance Turn flow
-and land in a simple player-wide inventory count once complete. The same 3D preview
-also appears next to whichever Factory is selected, showing what it's building.
-Tech research at a Lab is not implemented yet (a placeholder note says so in the
-panel) — see PLAN.md for what's deferred.
+**Operational, owned Lab** shows a design card: name a new Plan (must be non-empty
+and unique) and pick Quad/Hex/Missile — designed Plans get their own summary card
+with a small rendered preview icon (`PlanIconRenderer`, reusing `PlanPreviewBuilder`/
+`Combat/Play/DroneVisualBuilder`), not just a name. Selecting an **Operational,
+owned Factory** shows one card per designed Plan (same preview icon), each with a
+"Build" button that delivers straight to the first eligible Warehouse with room
+(`SiteStorageCatalog`/`TheatreMapHarness.TryQueueProduction`) — manufactured output
+always lands in a Warehouse first, never straight into an Airfield (storage is
+site-scoped and capacity-limited: Airfields 50 drones/200 missiles, Warehouses 1000
+drones/4000 missiles; Factories hold no stock of their own), not an unlimited global
+pool. Queued orders tick down via the normal turn flow and land in the Warehouse's
+storage once complete (an order whose Warehouse has since filled up waits at
+"awaiting storage space" rather than being lost, shown as its own card). Tech
+research at a Lab is not implemented yet — see PLAN.md for what's deferred.
+
+Every Plan preview icon (`PlanIconRenderer.GetOrCreateIcon`) is a real rendered
+snapshot, not hand-drawn art: the preview model is built far below the visible map
+(never in the main theatre camera's view), captured once by a disposable one-shot
+camera into a cached `Texture2D` keyed by the plan's name/category/accent color, then
+reused everywhere that Plan appears (Lab/Factory/Warehouse/Airfield/army-composition
+cards) — designing/producing more of the same Plan never re-renders it. This replaced
+an earlier version that instead spawned actual 3D models floating in world space next
+to whichever building was selected, which read as unclear/out of place; the icons
+live entirely inside the bottom bar's cards now.
+
+Every stock card at a Warehouse or Airfield has its own **Move** button — clicking it
+enters "pick a destination" mode: every other Player-owned, Operational Warehouse/
+Airfield with room lights up (the same highlight used for army moves — see
+`HexTileView.SetHighlighted`), and clicking one of them queues a
+`Theatre/Play/TransferOrder` moving that Plan's *entire* current stock there
+(`TheatreMapHarness.TryBeginTransfer`/`EligibleTransferDestinations`) — clicking
+anywhere else instead cancels picking mode. The shipped amount leaves the source
+site's storage the instant the transfer is queued (so the number visibly drops right
+away) and only lands at the destination once the transfer completes — always exactly
+1 turn later, regardless of how far apart the two sites are (no travel-time-by-
+distance modeling in this POC); in-progress transfers show as their own "in"/"out"
+cards on both ends. This is how stock ever reaches an Airfield to be deployed, since
+production can no longer target one directly.
+
+Every Operational site's own summary card also shows its health and, if damaged, a
+**Repair** button (`Site.BeginRepair`) — but only if it has an unbroken supply line
+of same-faction-owned hexes back to one of that faction's Base sites
+(`TheatreMapHarness.HasSupplyLineToBase`, a BFS over `HexGrid`); a site cut off behind
+enemy-held territory shows "Repair needs a supply line to a Base" instead of the
+button, even if it's still standing. This only gates Repair for now — a natural
+extension point if other logistics-dependent actions ever need the same rule.
+
+Selecting an **Operational, owned Airfield** shows a card per stored drone/missile
+Plan with +/- steppers to stage a selection, plus a "Deploy Army" card that moves the
+staged selection out of storage into a brand-new field **Army** (`Theatre/Play/
+Army.cs`) — only Airfields can deploy armies. Every army gets a random name
+(`Army.Name`, drawn from 10 adjectives x 10 nouns — "Iron Wolves," "Crimson Falcons,"
+etc. — 100 combinations) and starts at Private rank, ranking up (`ArmyRank`/
+`Army.Rank`) as it accrues experience (`Army.Experience`) from combat wins — shown as
+a row of chevrons (one per rank tier: Private=1 chevron, Corporal=2, etc. —
+`TheatreMapHarness.DrawRankBadge`) rather than a numeric progress bar, purely cosmetic
+progression with no stat bonuses yet. Every army is rendered as an actual small flying
+drone (`ArmyMarkerView`, built via the same `Combat/Play/DroneVisualBuilder` combat
+units and Plan previews use, quad/hex silhouette picked by whichever category it
+holds more of) with a name+rank tag floating above it and a status disc underneath
+that dims once it runs out of missiles, regardless of which faction owns it. An army
+is directly clickable (no more "select the tile, then find it in a list" detour,
+though a small per-army card on the selected hex still exists to disambiguate
+multiple stacked armies) via its own collider. Selecting a movable Player army
+highlights its 6 neighboring hexes on the map (`HexTileView.SetHighlighted`) —
+clicking a highlighted hex (whether it's empty, holds a hostile army, or holds a
+hostile site) both selects the destination and issues the move/attack order in one
+click (`TheatreMapHarness.TryMoveArmy`), no directional buttons needed. Moving onto
+an empty hex not already owned by the mover captures it (same stand-in as the
+"Capture" button above); moving onto a hostile army or hostile site resolves a real,
+instant combat-instance fight via `Theatre/Play/TheatreCombatResolver.cs` — it builds
+an actual `EngagementController`/`Stockpile`/`IObjective` (the same combat-instance
+machinery Phase 0/1 built, reusing the payload/hardness soft-cap damage model) and
+runs an AI strike loop headlessly rather than opening a separate playable 3D scene,
+awarding the attacker experience on a win. An army needs both drones and missiles to
+be combat-effective; a fight it can't win destroys it outright, while a fight it wins
+damages/destroys the target site or wipes the defending army. Neither a defended
+site nor a defending army has any active defensive fire of its own yet (no
+theatre-level point-defense/garrison model) — a known, deliberate simplification
+alongside the still-fully-deferred combat-instance-to-theatre feedback loop for
+player-fought (non-army) engagements. Since nothing actually shoots back at an army,
+losing a fight never destroys the attacker outright — it just fails to break through
+and holds its original position having expended its missiles (only a fully-depleted,
+drone-less army can actually disappear from the map). Selecting an army shows one
+card per Plan it holds (the closest analogue to "a card per unit" the pooled
+army-composition model supports), each with **Resupply**/**Unload** buttons against
+whichever Airfield it's currently standing on (`TheatreMapHarness.TryRestockArmy`/
+`TryUnloadArmy`); if another same-faction army shares its hex, a **Merge in** card
+folds it wholesale into the selected army (`TryMergeArmies`, summing composition and
+experience) — no auto-merge, so multiple same-owner armies can freely stack on one
+hex until the player chooses to combine them. A small compass in the top-right
+corner (`TheatreMapHarness.DrawCompass`) counter-rotates against the camera's orbit
+yaw (`TheatreMapCameraController.Yaw`), with a red needle, so "N" always points to
+true north regardless of how the map's been rotated.
+
+Sites are no longer uniformly-scaled colored cubes — `Theatre/Play/
+SiteVisualBuilder.cs` builds a distinct primitives-only silhouette per `SiteType`
+(Factory: hall + annex + smokestack; Warehouse: body + angled roof panels; Base:
+barracks + annex + radio mast; RadarInstallation: mast + tilted dish; LaunchPlatform/
+Airfield: pad + control tower; ReconStation: tower + dome; Lab: block + dome), still
+tinted by owner/state like before (`SiteMarkerView` now tints every renderer in the
+shape, not just one). True photorealistic/"ultra HD" building art isn't achievable
+this way — that needs authored 3D art (modeled/textured/PBR meshes from an art
+pipeline or asset store), a fundamentally different scope than assembling primitives
+procedurally at runtime, consistent with every other visual in this project (drones,
+missiles, hex tiles) being primitive-built rather than imported art.
 
 **Escape** opens a pause menu (`GameMenuController`): Save Game, Load Game, New Game
 (wipes and rebuilds the map fresh), and Quit. Save/Load round-trips every piece of
 persistent theatre-map state: tile ownership, which sites are on which tile (type/
-owner/state/turns-remaining/health), designed Plans, produced inventory, the turn
-counter and result, the per-faction resource pool, in-progress Factory production
-orders, and the territorial-control victory condition's sustain-turn counters (via
+owner/state/turns-remaining/health), designed Plans, each Airfield's/Warehouse's
+stored drone/missile counts, every deployed army (name, position, composition,
+experience/rank, moved-this-turn flag), the turn counter and result, the per-faction
+resource pool, in-progress
+Factory production orders (including their chosen destination site), and the
+territorial-control victory condition's sustain-turn counters (via
 `Core/SaveData.cs`/`SaveSystem.cs`, JSON; `Site.Restore(...)` reconstructs a site
 directly into its saved state; `TheatreTurnController.RestoreProgress`/
 `TerritorialControlCondition.RestoreConsecutiveTurns` restore the rest). Camera
@@ -164,7 +310,9 @@ progress).
 Clicking a button in the corner panel or the pause menu no longer "reaches through"
 to the 3D scene underneath (the previously-reported focus/selection bug) —
 `TheatreMapHarness.IsPointerOverUI()` gates both the harness's own hex-click handling
-and `TheatreMapCameraController`'s pan/orbit/zoom.
+and `TheatreMapCameraController`'s pan/orbit/zoom (now checking whether the pointer
+is within the bottom action bar's screen-space height rather than a small corner
+rect).
 
 Regenerate via `Vanquish.EditorTools.SceneBuilder.BuildPhase2TheatreMapScene`.
 `TheatreMapHarness.Build()` is exercised directly by `SmokeTest` (grid/site counts,

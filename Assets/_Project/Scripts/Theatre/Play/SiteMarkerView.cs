@@ -5,20 +5,24 @@ namespace Vanquish.Theatre.Play
 {
     /// <summary>
     /// The visual representation of one <see cref="Site"/> sitting on top of its
-    /// hex — a simple colored/sized primitive standing in for real art, distinguished
-    /// by <see cref="SiteType"/> (height) and owner (color). Hides itself once its
-    /// site is destroyed rather than trying to show a "wreckage" state.
+    /// hex — a distinctive procedural shape per <see cref="SiteType"/> (see
+    /// <see cref="SiteVisualBuilder"/>), uniformly tinted by owner/state across all
+    /// of its constituent primitives. Hides itself once its site is destroyed
+    /// rather than trying to show a "wreckage" state.
     /// </summary>
     public class SiteMarkerView : MonoBehaviour
     {
         public Site Site { get; private set; }
 
-        private Renderer _renderer;
+        private Renderer[] _renderers;
 
-        public void Initialize(Site site)
+        /// <summary>
+        /// </summary>
+        /// <param name="renderers">Every renderer built for this site's shape (see <see cref="SiteVisualBuilder.Build"/>) — all tinted identically by <see cref="Refresh"/>.</param>
+        public void Initialize(Site site, Renderer[] renderers)
         {
             Site = site;
-            _renderer = GetComponentInChildren<Renderer>();
+            _renderers = renderers ?? System.Array.Empty<Renderer>();
             Refresh();
         }
 
@@ -26,7 +30,7 @@ namespace Vanquish.Theatre.Play
         {
             gameObject.SetActive(Site.State != SiteState.Destroyed);
 
-            if (_renderer == null)
+            if (_renderers == null || _renderers.Length == 0)
                 return;
 
             Color ownerColor = Site.Owner switch
@@ -39,7 +43,13 @@ namespace Vanquish.Theatre.Play
             // Under-construction/repairing/relocating sites read as dimmer/greyed
             // out — not yet (or temporarily not) contributing, at a glance.
             bool dimmed = Site.State != SiteState.Operational;
-            _renderer.material.color = dimmed ? Color.Lerp(ownerColor, Color.gray, 0.6f) : ownerColor;
+            Color finalColor = dimmed ? Color.Lerp(ownerColor, Color.gray, 0.6f) : ownerColor;
+
+            foreach (Renderer renderer in _renderers)
+            {
+                if (renderer != null)
+                    renderer.material.color = finalColor;
+            }
         }
 
         public static float HeightForType(SiteType type) => type switch

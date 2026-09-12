@@ -1,0 +1,40 @@
+newmtl mat_FramePlate
+Kd 0.045000 0.045000 0.050000
+d 1.0
+illum 2
+
+newmtl mat_Stack
+Kd 1.000000 1.000000 1.000000
+d 1.0
+illum 2
+
+newmtl mat_Battery
+Kd 0.070000 0.070000 0.080000
+d 1.0
+illum 2
+
+newmtl mat_Camera
+Kd 0.030000 0.040000 0.050000
+d 1.0
+illum 2
+
+newmtl mat_Antenna
+Kd 0.045000 0.045000 0.050000
+d 1.0
+illum 2
+
+newmtl mat_Leg
+Kd 0.045000 0.045000 0.050000
+d 1.0
+illum 2
+
+newmtl mat_Arm
+Kd 0.045000 0.045000 0.050000
+d 1.0
+illum 2
+
+newmtl mat_ArmTip
+Kd 1.000000 1.000000 1.000000
+d 1.0
+illum 2
+
