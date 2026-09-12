@@ -97,5 +97,56 @@ namespace Vanquish.Theatre.Play
             mesh.RecalculateBounds();
             return mesh;
         }
+
+        /// <summary>
+        /// A pointy-top cone (apex at +height/2, base rim at -height/2), centered on
+        /// the local origin and facing +Y — used to give mountain hexes a real
+        /// peaked silhouette instead of just a tall flat-topped cylinder. Procedural,
+        /// same "no imported art" convention as <see cref="CreateHexPrism"/>.
+        /// </summary>
+        public static Mesh CreateConeMesh(float radius, float height, int segments = 16)
+        {
+            var mesh = new Mesh { name = "Cone" };
+
+            var vertices = new System.Collections.Generic.List<Vector3>();
+            var triangles = new System.Collections.Generic.List<int>();
+
+            int apex = vertices.Count;
+            vertices.Add(new Vector3(0f, height * 0.5f, 0f)); // apex (top)
+            int baseCenter = vertices.Count;
+            vertices.Add(new Vector3(0f, -height * 0.5f, 0f)); // base center
+            int rimStart = vertices.Count;
+            for (int i = 0; i < segments; i++)
+            {
+                float angle = Mathf.Deg2Rad * (360f * i / segments);
+                float x = Mathf.Cos(angle) * radius;
+                float z = Mathf.Sin(angle) * radius;
+                vertices.Add(new Vector3(x, -height * 0.5f, z));
+            }
+
+            // Side walls: apex -> rim[i] -> rim[i+1], wound to face outward.
+            for (int i = 0; i < segments; i++)
+            {
+                int next = (i + 1) % segments;
+                triangles.Add(apex);
+                triangles.Add(rimStart + i);
+                triangles.Add(rimStart + next);
+            }
+
+            // Solid base cap, wound to face -Y (down).
+            for (int i = 0; i < segments; i++)
+            {
+                int next = (i + 1) % segments;
+                triangles.Add(baseCenter);
+                triangles.Add(rimStart + next);
+                triangles.Add(rimStart + i);
+            }
+
+            mesh.SetVertices(vertices);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
     }
 }

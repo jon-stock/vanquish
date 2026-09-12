@@ -158,10 +158,14 @@ Assets/_Project/Scripts/Theatre/Play/*
 
 Open that scene and press Play for a real, visible hex-grid theatre map: a 10x10 patch
 of procedurally-meshed hexes (`HexMeshFactory` — no imported art, same convention as
-the drone visuals), 50 hexes per side, colored by terrain (open/road/mountain,
-mountains rendered taller) and by owner (blue Player / red Enemy), with a road cutting
-across the middle and a couple of mountain flanks for terrain variety. Two factories
-and two bases per side are rendered as distinct procedural silhouettes (see
+the drone visuals), 50 hexes per side, colored by terrain (open/road/mountain)
+and by owner (blue Player / red Enemy), with a road cutting across the middle and a
+couple of mountain flanks for terrain variety. Mountains are wild, impassable,
+Neutral terrain that renders as a distinct conical peak with a snow-capped summit
+(`HexMeshFactory.CreateConeMesh` drives a rocky cone + a small white cap stacked on
+the raised hex prism — still procedural primitives, no imported art) rather than a
+flat-topped cylinder; they can never be built on, captured, or occupied by an army.
+Two factories and two bases per side are rendered as distinct procedural silhouettes (see
 `SiteVisualBuilder`, below) rather than plain markers. WASD or left-click-drag pans
 the camera, right-click-drag orbits/rotates it, scroll zooms (smoothly — eases toward
 the target distance rather than snapping).
@@ -176,15 +180,18 @@ turn counter/resources and an "END TURN" button that live on the bar's right sid
 all times. The selected hex (or a selected army's hex) also gets a strong orange glow
 (`HexTileView.SetSelected`) distinct from the (yellow) move-destination highlight
 described below, so it's always obvious what's currently open — if the selected hex
-is adjacent to Player territory, a "Capture" button appears in its info line (a
-simple stand-in for "won a combat instance here" until the real combat-instance-to-
-theatre feedback loop exists). "END TURN" ticks site construction/production and
+is adjacent to Player territory, a "Capture" button appears in its info line (a simple
+stand-in for "won a combat instance here" until the real combat-instance-to-
+theatre feedback loop exists). The button is disabled for mountains, which are
+impassable wild terrain and never capturable. "END TURN" ticks site construction/production and
 checks both victory conditions (economic collapse, sustained territorial control)
 live.
 
 Owned empty hexes get a row of **build cards** (`SiteBuildCatalog`: Factory,
 Warehouse, Base, Airfield, Radar Installation, Recon Station, Lab — each with a turn
-cost), blocked on Mountain/Road terrain or an already-occupied hex. Selecting an
+cost), blocked on Mountain/Road terrain or an already-occupied hex. Selecting a
+mountain shows an "Impassable — no capture or construction" card (no Capture button,
+no build cards). Selecting an
 **Operational, owned Lab** shows a design card: name a new Plan (must be non-empty
 and unique) and pick Quad/Hex/Missile — designed Plans get their own summary card
 with a small rendered preview icon (`PlanIconRenderer`, reusing `PlanPreviewBuilder`/

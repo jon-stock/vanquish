@@ -185,7 +185,11 @@ namespace Vanquish.Theatre.Play
                     else
                         terrain = TerrainType.Open;
 
-                    TheatreFaction owner = col <= Columns / 2 - 1 ? TheatreFaction.Player : TheatreFaction.Enemy;
+                    // Mountains are wild, impassable terrain — not owned or capturable by
+                    // either side, so they always render as neutral rocky ground.
+                    TheatreFaction owner = terrain == TerrainType.Mountain
+                        ? TheatreFaction.Neutral
+                        : col <= Columns / 2 - 1 ? TheatreFaction.Player : TheatreFaction.Enemy;
 
                     HexTile tile = grid.GetOrAddTile(coord, terrain, owner);
                     CreateTileView(tile);
@@ -211,6 +215,42 @@ namespace Vanquish.Theatre.Play
             var view = go.AddComponent<HexTileView>();
             view.Initialize(tile);
             _tileViews[tile.Coordinate] = view;
+
+            if (tile.Terrain == TerrainType.Mountain)
+                CreateMountainPeak(go.transform, height);
+        }
+
+        /// <summary>
+        /// Stacks a conical, snow-capped peak on top of a raised mountain hex prism so
+        /// the impassable hexes read as real mountains rather than flat-topped
+        /// cylinders. The rocky body blends with the prism's grey terrain color and a
+        /// small white cap marks the summit — purely visual, no collider (mountains are
+        /// selected via the hex prism's own MeshCollider beneath).
+        /// </summary>
+        private void CreateMountainPeak(Transform hexParent, float prismHeight)
+        {
+            float prismTop = prismHeight * 0.5f;
+
+            // Rocky cone body: base resting on the prism's lid, apex rising above it.
+            float bodyRadius = HexRadius * 0.85f;
+            float bodyHeight = 1.6f;
+            float bodyApexY = prismTop + bodyHeight;
+            GameObject body = new GameObject("MountainPeak");
+            body.transform.SetParent(hexParent, false);
+            body.transform.localPosition = new Vector3(0f, prismTop + bodyHeight * 0.5f, 0f);
+            body.AddComponent<MeshFilter>().sharedMesh = HexMeshFactory.CreateConeMesh(bodyRadius, bodyHeight);
+            var bodyRenderer = body.AddComponent<MeshRenderer>();
+            bodyRenderer.material.color = new Color(0.44f, 0.42f, 0.38f);
+
+            // Snow cap: a small white cone perched on the summit.
+            float capRadius = HexRadius * 0.28f;
+            float capHeight = 0.55f;
+            GameObject cap = new GameObject("MountainSnowCap");
+            cap.transform.SetParent(hexParent, false);
+            cap.transform.localPosition = new Vector3(0f, bodyApexY + capHeight * 0.5f, 0f);
+            cap.AddComponent<MeshFilter>().sharedMesh = HexMeshFactory.CreateConeMesh(capRadius, capHeight);
+            var capRenderer = cap.AddComponent<MeshRenderer>();
+            capRenderer.material.color = new Color(0.96f, 0.97f, 1f);
         }
 
         private void BuildSites()
@@ -529,7 +569,8 @@ namespace Vanquish.Theatre.Play
             else if (SelectedArmy != null && SelectedArmy.Owner == TheatreFaction.Player && !SelectedArmy.HasMovedThisTurn &&
                 Controller.Result == TheatreResult.InProgress)
             {
-                reachable = new HashSet<HexCoordinate>(SelectedArmy.Location.Neighbors().Where(n => World.Grid.GetTile(n) != null));
+                reachable = new HashSet<HexCoordinate>(SelectedArmy.Location.Neighbors()
+                    .Where(n => { HexTile t = World.Grid.GetTile(n); return t != null && t.IsPassable; }));
             }
 
             foreach (KeyValuePair<HexCoordinate, HexTileView> kv in _tileViews)
@@ -545,10 +586,14 @@ namespace Vanquish.Theatre.Play
             }
         }
 
-        /// <summary>True if the selected hex is a non-Player hex adjacent to at least one Player-owned hex.</summary>
+        /// <summary>True if the selected hex is a non-Player, non-mountain hex adjacent to at least one Player-owned hex.</summary>
         public bool CanCaptureSelectedTile()
         {
             if (SelectedTile == null || SelectedTile.Owner == TheatreFaction.Player)
+                return false;
+
+            // Mountains are impassable wild terrain — never capturable (see BuildTiles).
+            if (SelectedTile.Terrain == TerrainType.Mountain)
                 return false;
 
             return World.Grid.NeighborsOf(SelectedTile.Coordinate).Any(neighbor => neighbor.Owner == TheatreFaction.Player);
@@ -1275,7 +1320,7 @@ namespace Vanquish.Theatre.Play
                 return false;
 
             HexTile destTile = World.Grid.GetTile(destination);
-            if (destTile == null)
+            if (destTile == null || !destTile.IsPassable)
                 return false;
 
             army.HasMovedThisTurn = true;
@@ -1974,6 +2019,15 @@ namespace Vanquish.Theatre.Play
 
         private void DrawBuildCards()
         {
+            if (SelectedTile.Terrain == TerrainType.Mountain)
+            {
+                BeginCard(170f);
+                GUILayout.Label("MOUNTAIN", Bold());
+                GUILayout.Label("Impassable wild terrain — no capture or construction", Italic());
+                EndCard();
+                return;
+            }
+
             if (SelectedTile.Owner != TheatreFaction.Player)
             {
                 BeginCard(170f);

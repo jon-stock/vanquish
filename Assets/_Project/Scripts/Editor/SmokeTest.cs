@@ -818,8 +818,12 @@ namespace Vanquish.EditorTools
 
                 int playerHexes = harness.World.Grid.CountOwnedBy(TheatreFaction.Player);
                 int enemyHexes = harness.World.Grid.CountOwnedBy(TheatreFaction.Enemy);
-                Expect(playerHexes == 50, $"Player should own 5 of 10 columns * 10 rows = 50 hexes, got {playerHexes}");
-                Expect(enemyHexes == 50, $"Enemy should own 5 of 10 columns * 10 rows = 50 hexes, got {enemyHexes}");
+                // 10x10 = 100 hexes; the two col-4 mountain flanks are now impassable
+                // Neutral wild terrain (not owned by either side), so the 50/50 column
+                // split is 48 Player + 50 Enemy + 2 Neutral mountains.
+                Expect(playerHexes == 48, $"Player should own 50 hexes minus the 2 Neutral mountain flanks = 48, got {playerHexes}");
+                Expect(enemyHexes == 50, $"Enemy should own the 5 columns opposite the Player half = 50 (mountains sit on the Player half), got {enemyHexes}");
+                Expect(harness.World.Grid.CountOwnedBy(TheatreFaction.Neutral) == 2, "The two mountain flanks should be Neutral wild terrain, not owned by either side");
 
                 Expect(harness.World.Sites.Count == 4, $"Should have 4 sites (factory+base per side), got {harness.World.Sites.Count}");
                 Expect(harness.World.Sites.Any(s => s.Owner == TheatreFaction.Player && s.Type == SiteType.Factory && s.IsOperational), "Player factory should exist and be operational");
